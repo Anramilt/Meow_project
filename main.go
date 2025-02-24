@@ -13,6 +13,8 @@ func main() {
 	//ConnectDB()
 
 	fmt.Println("Hello world!")
+	fmt.Println("Hello world!")
+	fmt.Println("Hello world!")
 
 	//logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
