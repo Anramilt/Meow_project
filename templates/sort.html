@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Игры по категориям</title>
+    <link rel="styles" href="styles.css">
+</head>
+<body>
+    <div id="menu">
+        <h2>Категории</h2>
+        <select id="categories" onchange="showInfo()">
+            <option value="">Выберите категорию</option>
+            <option value="category1">Категория 1</option>
+            <option value="category2">Категория 2</option>
+            <option value="category3">Категория 3</option>
+        </select>
+    </div>
+    <div id="info">
+        <h2>Информация</h2>
+        <p id="infoText">Выберите категорию, чтобы увидеть информацию.</p>
+        <button id="actionButton" style="display:none;">Действие</button>
+    </div>
+
+    <script>
+        function showInfo() {
+            const select = document.getElementById('categories');
+            const infoText = document.getElementById('infoText');
+            const actionButton = document.getElementById('actionButton');
+
+            switch (select.value) {
+                case 'category1':
+                    infoText.textContent = 'Информация о категории 1.';
+                    actionButton.style.display = 'inline';
+                    break;
+                case 'category2':
+                    infoText.textContent = 'Информация о категории 2.';
+                    actionButton.style.display = 'inline';
+                    break;
+                case 'category3':
+                    infoText.textContent = 'Информация о категории 3.';
+                    actionButton.style.display = 'inline';
+                    break;
+                default:
+                    infoText.textContent = 'Выберите категорию, чтобы увидеть информацию.';
+                    actionButton.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
