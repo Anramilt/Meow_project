@@ -3,10 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Главная страница</title>
+    <title>Поиск игры</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        async function searchGame() {
+            let query = document.getElementById("searchInput").value.trim();
+            let resultDiv = document.getElementById("results");
+
+            if (query.length < 1) {
+                resultDiv.style.display = "none"; // Скрываем список, если поле пустое
+                return;
+            }
+            //запрос на сервер
+            let response = await fetch(`/search?q=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                console.error("Ошибка запроса:", response.status);
+                return;
+            }
+            //ответ в формате json
+            let categories = await response.json();
+            resultDiv.innerHTML = "";
+            
+            if (categories.length === 0) {
+                resultDiv.style.display = "none"; // Если нет результатов, скрываем список
+                return;
+            }
+
+            categories.forEach(tag => {
+                let div = document.createElement("div");
+                div.textContent = tag;
+                div.classList.add("result-item");
+                div.addEventListener("click", () => {
+                    document.getElementById("searchInput").value = tag; // Вставляем выбранный элемент в поле ввода
+                    resultDiv.style.display = "none"; // Скрываем список после выбора
+                });
+                resultDiv.appendChild(div);
+            });
+
+            resultDiv.style.display = "block"; // Показываем список
+        }
+
+        document.addEventListener("click", function(event) {
+            let resultDiv = document.getElementById("results");
+            let searchInput = document.getElementById("searchInput");
+            
+            if (!searchInput.contains(event.target) && !resultDiv.contains(event.target)) {
+                resultDiv.style.display = "none"; // Скрываем список при клике вне него
+            }
+        });
+    </script>
 </head>
 <body>
-    <h1>Главная страница</h1>
-    <a href="/sort"><button>Сортировка</button></a>
+    <h1>Поиск игры</h1>
+    <div style="position: relative;">
+        <input type="text" id="searchInput" oninput="searchGame()" placeholder="Введите название игры">
+        <div id="results"></div>
+    </div>
 </body>
 </html>
