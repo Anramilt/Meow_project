@@ -5,11 +5,6 @@ import (
 	"net/http"
 )
 
-/*const (
-	ExpectedUsername = "user"
-	ExpectedPassword = "secret"
-)*/
-
 func main() {
 	ConnectDB()
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
@@ -18,15 +13,20 @@ func main() {
 	fmt.Println("Hello world!")
 	fmt.Println("Hello world!")
 
-	//регистрирует нашу функцию обработчика  для обработки всех запросов GET
+	// Генерация и добавление 5 ключей
+	/*if err := addKeysToDB(5); err != nil {
+		log.Fatal("Ошибка при добавлении ключей в БД:", err)
+	}*/
+
 	//http.HandleFunc("/", handler)
 	//http.HandleFunc("/login", authHandler) //обработчик авторизации
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/search", searchHandler)
+	http.HandleFunc("/searchlimit", searchlimitHandler)
+	http.HandleFunc("/register", registerHandler)       // Страница регистрации
+	http.HandleFunc("/handle-register", handleRegister) // Обработчик регистрации
+	http.HandleFunc("/login", handleLoginPage)
+	http.HandleFunc("/handle-login", handleLogin)
+
 	http.ListenAndServe(":8080", nil)
-
-	//http.HandleFunc("/registration", addAccountHandler) //добавление аккаунта в БД
-	//http.HandleFunc("/echo", auth(echoHandler))         //предоставление доступа (к эхо) по авторизации
-	//http.HandleFunc("/addecho", auth(addEchoHandler))   //добавить БД в эхо
-
 }

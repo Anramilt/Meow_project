@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Результат</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        function showMessage(message) {
+            alert(message);  // Показать сообщение в виде всплывающего окна
+        }
+
+        window.onload = function() {
+            const message = "{{.}}";  // Сообщение, переданное с сервера
+            showMessage(message);
+        }
+    </script>
+</head>
+<body>
+    <p>{{.}}</p>  <!-- Отображение сообщения на странице -->
+</body>
+</html>

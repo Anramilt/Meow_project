@@ -1,5 +1,1 @@
-SELECT DISTINCT category.tag 
-FROM category
-JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
-JOIN game ON accordance_game_category.id_game = game.id_game
-WHERE game.name_game = 'Большой-маленький';
+SELECT content_key, salt FROM key WHERE content_key = "8f2e34b8a7c0561f707e57271ca9cab9"

@@ -15,7 +15,7 @@
                 return;
             }
             //запрос на сервер
-            let response = await fetch(`/search?q=${encodeURIComponent(query)}`);
+            let response = await fetch(`/searchlimit?q=${encodeURIComponent(query)}`);
             if (!response.ok) {
                 console.error("Ошибка запроса:", response.status);
                 return;
@@ -51,13 +51,24 @@
                 resultDiv.style.display = "none"; // Скрываем список при клике вне него
             }
         });
+        function performSearch(){
+            let query = document.getElementById("searchInput").value.trim();
+            if (query.length >0){
+                window.location.href = `/search?q=${encodeURIComponent(query)}`;
+            }
+        }
     </script>
 </head>
 <body>
     <h1>Поиск игры</h1>
+    <div class="auth-buttons">
+        <a href="/register"><button>Регистрация</button></a>
+        <a href="/login"><button>Авторизация</button></a>
+    </div>
     <div style="position: relative;">
         <input type="text" id="searchInput" oninput="searchGame()" placeholder="Введите название игры">
         <div id="results"></div>
+        <button onclick="performSearch()">Поиск</button>
     </div>
 </body>
 </html>
