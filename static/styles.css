@@ -21,7 +21,7 @@ h1 {
 
 .auth-buttons button {
     padding: 10px 15px;
-    background-color: #4CAF50;
+    background-color: #87CEEB;
     color: white;
     border: none;
     border-radius: 5px;
@@ -29,7 +29,7 @@ h1 {
 }
 
 .auth-buttons button:hover {
-    background-color: #45a049;
+    background-color: #1E90FF;
 }
 input {
     width: 300px;
@@ -69,15 +69,22 @@ input:focus {
     color: white;
 }
 
-button {
+.button-container {
+    display: flex;
+    justify-content: space-between; /* Равномерное распределение кнопок */
+    gap: 10px; /* Отступ между кнопками */
+    margin-top: 20px; /* Отступ сверху, чтобы кнопки не сливались с полями ввода */
+}
+
+.button {
     padding: 10px;
-    background-color: #4CAF50;
+    background-color: #87CEEB;
     color: white;
     border: none;
     border-radius: 5px;
     cursor: pointer;
 }
 
-button:hover {
-    background-color: #45a049;
+.button:hover {
+    background-color: #1E90FF;
 }

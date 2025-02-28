@@ -114,7 +114,6 @@ func addAccountToDB(login, password, contentKey string) error {
 
 // Функция для проверки введенного логина и пароля
 func verifyLoginCredentials(login, password string) error {
-	// Получаем соль и хеш пароля для данного логина
 	var storedSalt, storedHashedPassword string
 	err := db.QueryRow("SELECT salt, password FROM account WHERE login = $1", login).Scan(&storedSalt, &storedHashedPassword)
 	if err == sql.ErrNoRows {

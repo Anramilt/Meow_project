@@ -95,8 +95,45 @@ func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Если найдено меньше 3-х подсказок, выполняем второй запрос с использованием расстояния Левенштейна
+	if len(categories) < 3 {
+		query_one := r.URL.Query().Get("q")
+		levenshteinQuery := `
+            SELECT DISTINCT category.tag 
+            FROM category
+            JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
+            JOIN game ON accordance_game_category.id_game = game.id_game
+            WHERE levenshtein(game.name_game, $1) <= 4
+            LIMIT 3;`
+
+		var levenshteinCategories []string
+		err = db.Select(&levenshteinCategories, levenshteinQuery, query_one)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Объединяем результаты
+		categories = append(categories, levenshteinCategories...)
+		// Удаляем дубликаты
+		categories = unique(categories)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(categories)
+}
+
+// Функция для удаления дубликатов из среза строк
+func unique(strings []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range strings {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
 }
 
 // Обработчик для регистрации нового пользователя
