@@ -27,6 +27,7 @@ func main() {
 	http.HandleFunc("/handle-register", handleRegister) // Обработчик регистрации
 	http.HandleFunc("/login", handleLoginPage)
 	http.HandleFunc("/handle-login", handleLogin)
+	http.HandleFunc("/api/message", apiHandler)
 
 	http.ListenAndServe(":8080", nil)
 }

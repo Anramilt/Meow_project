@@ -21,6 +21,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, nil)
 }
 
+type Message struct {
+	Text string `json:"text"`
+}
+
+func apiHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	response := Message{Text: "Привет из Go!"}
+	json.NewEncoder(w).Encode(response)
+}
+
 // Обработчик для страницы регистрации
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFiles("templates/register.html")

@@ -65,10 +65,15 @@
         <a href="/register"><button>Регистрация</button></a>
         <a href="/login"><button>Авторизация</button></a>
     </div>
-    <div style="position: relative;">
+    <!--<div style="position: relative;">-->
+        <div class="search-container">
         <input type="text" id="searchInput" oninput="searchGame()" placeholder="Введите название игры">
         <div id="results"></div>
         <button type="button" class="button" onclick="performSearch()">Поиск</button>
     </div>
+    <div id="root"></div>
+
+    <script src="/static/index.js"></script>
+    
 </body>
 </html>
