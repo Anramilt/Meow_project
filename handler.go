@@ -25,14 +25,45 @@ type Message struct {
 	Text string `json:"text"`
 }
 
-func apiHandler(w http.ResponseWriter, r *http.Request) {
+/*func apiHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Разрешаем запросы с React
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Content-Type", "application/json")
+
 	response := Message{Text: "Привет из Go!"}
 	json.NewEncoder(w).Encode(response)
+}*/
+
+/*func handleCors(w http.ResponseWriter, r *http.Request) bool {
+	(w).Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
+		w.Header().Set("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Authorization, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers")
+		return true
+	}
+	return false
+}*/
+
+func handleCors(w http.ResponseWriter, r *http.Request) bool {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK) // Здесь важно отправить корректный статус!
+		return true
+	}
+	return false
 }
 
 // Обработчик для страницы регистрации
 func registerHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
 	tmpl, err := template.ParseFiles("templates/register.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -43,6 +74,9 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 // Обработчик для отображения формы авторизации
 func handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
 	tmpl, err := template.ParseFiles("templates/login.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -53,6 +87,9 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 
 // Обработчик поиска
 func searchHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		http.Error(w, "Query parameter is required", http.StatusBadRequest)
@@ -85,6 +122,9 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 
 // Обработчик поиска с лимитом подсказок 3
 func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
 	query := r.URL.Query().Get("q") + "%"
 	if query == "" {
 		http.Error(w, "Query parameter is required", http.StatusBadRequest)
@@ -148,6 +188,9 @@ func unique(strings []string) []string {
 
 // Обработчик для регистрации нового пользователя
 func handleRegister(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
 	if r.Method == "POST" {
 		login := r.FormValue("login")
 		password := r.FormValue("password")
@@ -176,6 +219,9 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 // Обработчик для авторизации пользователя
 func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
 	if r.Method == "POST" {
 		login := r.FormValue("login")
 		password := r.FormValue("password")
