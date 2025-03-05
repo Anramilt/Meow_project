@@ -222,24 +222,29 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
 	}
-	if r.Method == "POST" {
-		login := r.FormValue("login")
-		password := r.FormValue("password")
-
-		// Проверяем, существует ли пользователь и правильный ли пароль
-		err := verifyLoginCredentials(login, password)
-		if err != nil {
-			http.Error(w, "Ошибка авторизации: "+err.Error(), http.StatusUnauthorized)
-			return
-		}
-
-		// Если авторизация прошла успешно, выводим сообщение
-		message := "Вы успешно авторизовались"
-		tmpl, err := template.ParseFiles("templates/message.html")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		tmpl.Execute(w, message)
+	if r.Method != "POST" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
 	}
+
+	login := r.FormValue("login")
+	password := r.FormValue("password")
+
+	// Проверяем, существует ли пользователь и правильный ли пароль
+	err := verifyLoginCredentials(login, password)
+	if err != nil {
+		http.Error(w, "Ошибка авторизации: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Вы успешно авторизовались"))
+	// Если авторизация прошла успешно, выводим сообщение
+	//message := "Вы успешно авторизовались"
+	/*tmpl, err := template.ParseFiles("templates/message.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpl.Execute(w, message)*/
+
 }
