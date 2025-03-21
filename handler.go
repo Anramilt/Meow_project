@@ -4,8 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 )
+
+// Папка, где будут храниться изображения
+const imageDir = "E:/Работа/work/image"
 
 type ErrorResponse struct {
 	Error string
@@ -247,4 +253,108 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl.Execute(w, message)*/
 
+}
+
+// Обработчик для работы с файлами (загрузка и список)
+func fileHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	switch r.Method {
+	case "GET":
+		// Получение списка файлов
+		files, err := listFiles(imageDir)
+		if err != nil {
+			http.Error(w, "Ошибка при получении списка файлов: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(files)
+
+	case "POST":
+		// Загрузка файла
+		err := r.ParseMultipartForm(10 << 20) // 10 MB limit
+		if err != nil {
+			http.Error(w, "Размер файла слишком большой", http.StatusBadRequest)
+			return
+		}
+
+		file, handler, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "Ошибка загрузки файла", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		// Проверка расширения файла
+		ext := filepath.Ext(handler.Filename)
+		allowedExtensions := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true}
+		if !allowedExtensions[ext] {
+			http.Error(w, "Недопустимый тип файла", http.StatusBadRequest)
+			return
+		}
+
+		// Создание папки, если её нет
+		if _, err := os.Stat(imageDir); os.IsNotExist(err) {
+			os.Mkdir(imageDir, os.ModePerm)
+		}
+
+		// Сохранение файла
+		filePath := filepath.Join(imageDir, handler.Filename)
+		dst, err := os.Create(filePath)
+		if err != nil {
+			http.Error(w, "Ошибка сохранения файла", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, "Ошибка копирования файла", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Файл %s успешно загружен!", handler.Filename)
+
+	default:
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+	}
+}
+
+// Обработчик для получения конкретного изображения
+func imageHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	imageName := r.URL.Query().Get("name")
+	if imageName == "" {
+		http.Error(w, "Параметр 'name' обязателен", http.StatusBadRequest)
+		return
+	}
+
+	imagePath := filepath.Join(imageDir, imageName)
+	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		http.Error(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	http.ServeFile(w, r, imagePath)
+}
+
+// Функция получения списка файлов
+func listFiles(directory string) ([]string, error) {
+	files := []string{}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files = append(files, entry.Name())
+		}
+	}
+	return files, nil
 }

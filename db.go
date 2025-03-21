@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 
 	//"context"
 
@@ -133,6 +135,26 @@ func verifyLoginCredentials(login, password string) error {
 	}
 
 	return nil
+}
+
+// Функция для загрузки картинок в БД
+func uploadImagesToDB(db *sql.DB, dir string) error {
+	insertStmt := "INSERT INTO images (name, path) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING"
+
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			_, err := db.Exec(insertStmt, info.Name(), path)
+			if err != nil {
+				fmt.Println("Ошибка при добавлении в БД:", err)
+			} else {
+				fmt.Println("Добавлено:", info.Name())
+			}
+		}
+		return nil
+	})
 }
 
 //
