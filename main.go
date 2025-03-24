@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 )
 
 func main() {
-	//ConnectDB()
+	ConnectDB()
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	fmt.Println("Hello world!")
@@ -19,16 +20,18 @@ func main() {
 	}*/
 
 	//Добавление картинок в БД:
+	/*uploadImagesToDB(imageDir)*/
 
-	/*if err := uploadImagesToDB(db, imageDir); err != nil {
-		log.Fatal("Ошибка загрузки изображений:", err)
-	}*/
+	rootDir := "/home/sofia/Документы/Menu" // Укажи путь к корневой папке
+	if err := processAllJsonFiles(rootDir); err != nil {
+		log.Fatal("Ошибка обработки файлов:", err)
+	}
 
 	//http.HandleFunc("/", handler)
 	//http.HandleFunc("/login", authHandler) //обработчик авторизации
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/search", searchHandler)
-	http.HandleFunc("/searchlimit", searchlimitHandler)
+	//http.HandleFunc("/searchlimit", searchlimitHandler)
 	http.HandleFunc("/register", registerHandler)       // Страница регистрации
 	http.HandleFunc("/handle-register", handleRegister) // Обработчик регистрации
 	http.HandleFunc("/login", handleLoginPage)

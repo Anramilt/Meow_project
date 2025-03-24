@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 )
 
-// Папка, где будут храниться изображения
-const imageDir = "E:/Работа/work/image"
+// Папка, где хранятся все изображения
+const imageDir = "/home/sofia/go/src/image"
 
 type ErrorResponse struct {
 	Error string
@@ -91,6 +91,74 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, nil)
 }
 
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	// Поиск игр и их изображений
+	rows, err := db.Query(`
+		SELECT g.id_game, g.name_game, g.type, g.icon, i.image_path
+		FROM games g
+		LEFT JOIN images i ON g.id_game = i.id_game
+		WHERE g.name_game ILIKE $1`, "%"+query+"%")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// Создаем структуру ответа
+	type GameWithImages struct {
+		ID     int      `json:"id"`
+		Name   string   `json:"name"`
+		Type   string   `json:"type"`
+		Icon   string   `json:"icon"`
+		Images []string `json:"images"`
+	}
+
+	gameMap := make(map[string]*GameWithImages)
+
+	// Обрабатываем результаты запроса
+	for rows.Next() {
+		var id int
+		var name, gameType, icon, imagePath string
+		if err := rows.Scan(&id, &name, &gameType, &icon, &imagePath); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Если игра уже есть в map, просто добавляем изображение
+		if _, exists := gameMap[name]; exists {
+			gameMap[name].Images = append(gameMap[name].Images, imagePath)
+		} else {
+			gameMap[name] = &GameWithImages{
+				ID:     id,
+				Name:   name,
+				Type:   gameType,
+				Icon:   icon,
+				Images: []string{imagePath},
+			}
+		}
+	}
+
+	// Преобразуем map в JSON
+	response := make([]GameWithImages, 0, len(gameMap))
+	for _, game := range gameMap {
+		response = append(response, *game)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+/*
 // Обработчик поиска
 func searchHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
@@ -104,7 +172,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	var categories []string
 	sqlQuery := `
-	  	SELECT DISTINCT category.tag 
+	  	SELECT DISTINCT category.tag
 		FROM category
 		JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
 		JOIN game ON accordance_game_category.id_game = game.id_game
@@ -125,8 +193,10 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(categories)
 }
+*/
 
 // Обработчик поиска с лимитом подсказок 3
+/*
 func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -139,7 +209,7 @@ func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 
 	var categories []string
 	sqlQuery := `
-	  	SELECT DISTINCT category.tag 
+	  	SELECT DISTINCT category.tag
 		FROM category
 		JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
 		JOIN game ON accordance_game_category.id_game = game.id_game
@@ -155,7 +225,7 @@ func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 	if len(categories) < 3 {
 		query_one := r.URL.Query().Get("q")
 		levenshteinQuery := `
-            SELECT DISTINCT category.tag 
+            SELECT DISTINCT category.tag
             FROM category
             JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
             JOIN game ON accordance_game_category.id_game = game.id_game
@@ -191,7 +261,7 @@ func unique(strings []string) []string {
 	}
 	return list
 }
-
+*/
 // Обработчик для регистрации нового пользователя
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
