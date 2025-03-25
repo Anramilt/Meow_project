@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Папка, где хранятся все изображения
-const imageDir = "/home/sofia/go/src/image"
+const imageDir = "/home/sofia/Документы/Menu" // путь к корневой папке
 
 type ErrorResponse struct {
 	Error string
@@ -91,6 +92,7 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, nil)
 }
 
+// Обработчик поиска
 func searchHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -104,10 +106,10 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Поиск игр и их изображений
 	rows, err := db.Query(`
-		SELECT g.id_game, g.name_game, g.type, g.icon, i.image_path
+		SELECT g.id_game, g.name_game, g.type, g.icon, i.image_name
 		FROM games g
 		LEFT JOIN images i ON g.id_game = i.id_game
-		WHERE g.name_game ILIKE $1`, "%"+query+"%")
+		WHERE g.name_game ILIKE $1 LIMIT 3`, "%"+query+"%")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -156,6 +158,166 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// Поиск с Левентшейном -не рабочий
+func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var games []string
+	sqlQuery := `
+        SELECT DISTINCT name_game
+        FROM games
+        WHERE name_game ILIKE $1
+        LIMIT 3;`
+	err := db.Select(&games, sqlQuery, "%"+query+"%")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Если найдено меньше 2-х подсказок, добавляем результаты по Левенштейну
+	if len(games) < 2 {
+		levenshteinQuery := `
+            SELECT DISTINCT name_game
+            FROM games
+            WHERE levenshtein(name_game, $1) <= 4
+            LIMIT 3;`
+		var levenshteinGames []string
+		err = db.Select(&levenshteinGames, levenshteinQuery, query)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Объединяем результаты, удаляем дубликаты
+		games = append(games, levenshteinGames...)
+		games = unique(games)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(games)
+}
+
+// Функция для удаления дубликатов
+func unique(strings []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range strings {
+		if _, exists := keys[entry]; !exists {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
+/*
+func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	query := r.URL.Query().Get("q") + "%"
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var games []string
+	sqlQuery := `
+	  	SELECT DISTINCT name_game
+		FROM games
+		WHERE name_game ILIKE $1
+		LIMIT 3;`
+	err := db.Select(&games, sqlQuery, query)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Если найдено меньше 3-х подсказок, добавляем результаты по Левенштейну
+	if len(games) < 3 {
+		query_one := r.URL.Query().Get("q")
+		levenshteinQuery := `
+            SELECT DISTINCT name_game
+            FROM games
+            WHERE levenshtein(name_game, $1) <= 4
+            LIMIT 3;`
+		var levenshteinGames []string
+		err = db.Select(&levenshteinGames, levenshteinQuery, query_one)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Объединяем результаты, удаляем дубликаты
+		games = append(games, levenshteinGames...)
+		games = unique(games)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(games)
+}
+
+// Функция для удаления дубликатов
+func unique(strings []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range strings {
+		if _, exists := keys[entry]; !exists {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}*/
+
+func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	imageName := r.URL.Query().Get("name")
+	if imageName == "" {
+		http.Error(w, "Параметр 'name' обязателен", http.StatusBadRequest)
+		return
+	}
+
+	// Директория, где хранятся все изображения
+	baseDir := "/home/sofia/Документы/Menu"
+
+	// Поиск файла в любой папке
+	var foundPath string
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.Contains(info.Name(), imageName) {
+			foundPath = path
+		}
+		return nil
+	})
+
+	if err != nil {
+		http.Error(w, "Ошибка при поиске файла", http.StatusInternalServerError)
+		return
+	}
+
+	if foundPath == "" {
+		http.Error(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	// Отправляем файл пользователю
+	http.ServeFile(w, r, foundPath)
 }
 
 /*
@@ -393,7 +555,7 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Обработчик для получения конкретного изображения
-func imageHandler(w http.ResponseWriter, r *http.Request) {
+/*func imageHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
 	}
@@ -411,7 +573,8 @@ func imageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.ServeFile(w, r, imagePath)
-}
+
+}*/
 
 // Функция получения списка файлов
 func listFiles(directory string) ([]string, error) {

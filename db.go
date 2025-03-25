@@ -218,7 +218,8 @@ func processJsonFile(filePath string) {
 	// Добавляем изображения
 	for _, page := range game.Pages {
 		for _, answer := range page.Answers {
-			_, err := db.Exec("INSERT INTO images (id_game, image_path, is_correct) VALUES ($1, $2, $3)", gameID, answer.Image, answer.IsRight)
+			//imagePath := filepath.Join(filepath.Base(filepath.Dir(filePath)), answer.Image)
+			_, err := db.Exec("INSERT INTO images (id_game, image_name, is_correct) VALUES ($1, $2, $3)", gameID, answer.Image, answer.IsRight)
 			if err != nil {
 				log.Println("Ошибка добавления изображения:", err)
 			}

@@ -1,5 +1,6 @@
-CREATE TABLE category (
-	id_category SERIAL PRIMARY KEY,
-	tag TEXT UNIQUE NOT NULL
+CREATE TABLE images (
+   id SERIAL PRIMARY KEY,
+   id_game INT REFERENCES games(id_game) ON DELETE CASCADE,
+   image_name TEXT NOT NULL,
+   is_correct BOOLEAN
 );
-
