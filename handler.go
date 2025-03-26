@@ -98,7 +98,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := r.URL.Query().Get("q")
+	query := "%" + r.URL.Query().Get("q") + "%"
 	if query == "" {
 		http.Error(w, "Query parameter is required", http.StatusBadRequest)
 		return
@@ -109,7 +109,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		SELECT g.id_game, g.name_game, g.type, g.icon, i.image_name
 		FROM games g
 		LEFT JOIN images i ON g.id_game = i.id_game
-		WHERE g.name_game ILIKE $1 LIMIT 3`, "%"+query+"%")
+		WHERE g.name_game ILIKE $1`, "%"+query+"%")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -166,7 +166,7 @@ func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := r.URL.Query().Get("q")
+	query := "%" + r.URL.Query().Get("q") + "%"
 	if query == "" {
 		http.Error(w, "Query parameter is required", http.StatusBadRequest)
 		return
@@ -177,7 +177,7 @@ func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
         SELECT DISTINCT name_game
         FROM games
         WHERE name_game ILIKE $1
-        LIMIT 3;`
+        LIMIT 6;`
 	err := db.Select(&games, sqlQuery, "%"+query+"%")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -189,8 +189,8 @@ func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 		levenshteinQuery := `
             SELECT DISTINCT name_game
             FROM games
-            WHERE levenshtein(name_game, $1) <= 4
-            LIMIT 3;`
+            WHERE levenshtein(name_game, $1) <= 9
+            LIMIT 6;`
 		var levenshteinGames []string
 		err = db.Select(&levenshteinGames, levenshteinQuery, query)
 		if err != nil {
