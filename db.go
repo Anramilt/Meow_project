@@ -29,26 +29,6 @@ const (
 	dbname   = "meowdb"
 )
 
-// Структуры для JSON
-type Answer struct {
-	IsRight bool   `json:"IsRight"`
-	Image   string `json:"Image"`
-	Phrase  string `json:"Phrase"`
-}
-
-type Page struct {
-	MainImage  string   `json:"MainImage"`
-	MainPhrase string   `json:"MainPhrase"`
-	Answers    []Answer `json:"Answers"`
-}
-
-type Game struct {
-	Name  string `json:"Name"`
-	Icon  string `json:"Icon"`
-	Type  string `json:"Type"`
-	Pages []Page `json:"Pages"`
-}
-
 func ConnectDB() error {
 	var err error
 	db, err = sqlx.Connect("postgres", fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
@@ -160,6 +140,196 @@ func verifyLoginCredentials(login, password string) error {
 	return nil
 }
 
+// Определение структуры ссылки на игру в меню
+type GameRef struct {
+	Name string `json:"Name"`
+	Icon string `json:"Icon"`
+	Type string `json:"Type"`
+	Path string `json:"Path"`
+}
+
+// Определение структур JSON
+type Answer struct {
+	IsRight bool   `json:"IsRight,omitempty"`
+	Image   string `json:"Image,omitempty"`
+	Phrase  string `json:"Phrase"`
+}
+
+type Answers []Answer
+
+type Page struct {
+	MainImage  string  `json:"MainImage"`
+	MainPhrase string  `json:"MainPhrase"`
+	Answers    Answers `json:"Answers"`
+}
+
+type Game struct {
+	Name  string `json:"Name"`
+	Icon  string `json:"Icon,omitempty"`
+	Type  string `json:"Type"`
+	Pages []Page `json:"Pages"`
+}
+
+// Подключение к базе данных (замени на свое подключение)
+
+// Обход всех JSON-файлов в папке
+func processAllJsonFiles(rootDir string) error {
+	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".json") {
+			return nil
+		}
+		fmt.Println("Обрабатываю файл:", path)
+		processJsonFile(path)
+		return nil
+	})
+}
+
+// Обработка одного JSON-файла
+func processJsonFile(filePath string) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Println("Ошибка открытия файла:", err)
+		return
+	}
+	defer file.Close()
+
+	bytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Println("Ошибка чтения файла:", err)
+		return
+	}
+
+	// Определяем тип JSON-файла (игра или категория)
+	var temp struct {
+		Type string `json:"Type"`
+	}
+	if err := json.Unmarshal(bytes, &temp); err != nil {
+		log.Println("Ошибка определения типа JSON:", err)
+		return
+	}
+
+	if temp.Type == "SubCategory" {
+		processMenuJson(filePath, bytes)
+	} else {
+		processGameJson(filePath, bytes)
+	}
+}
+
+// Обработка JSON-файла категории (меню)
+func processMenuJson(filePath string, bytes []byte) {
+	var category struct {
+		Name      string `json:"Name"`
+		MainImage string `json:"MainImage"`
+		Pages     []struct {
+			TopRight    *GameRef `json:"TopRight"`
+			CenterRight *GameRef `json:"CenterRight"`
+			BottomRight *GameRef `json:"BottomRight"`
+			TopLeft     *GameRef `json:"TopLeft"`
+			CenterLeft  *GameRef `json:"CenterLeft"`
+			BottomLeft  *GameRef `json:"BottomLeft"`
+		} `json:"Pages"`
+	}
+
+	if err := json.Unmarshal(bytes, &category); err != nil {
+		log.Println("Ошибка декодирования JSON категории:", err)
+		return
+	}
+
+	// Добавляем категорию в БД
+	var categoryID int
+	err := db.QueryRow("INSERT INTO category (tag, icon) VALUES ($1, $2) ON CONFLICT (tag) DO UPDATE SET icon=EXCLUDED.icon RETURNING id_category",
+		category.Name, category.MainImage).Scan(&categoryID)
+	if err != nil {
+		log.Println("Ошибка добавления категории:", err)
+		return
+	}
+
+	fmt.Println("Категория добавлена:", category.Name)
+
+	// Обрабатываем вложенные игры
+	gameRefs := []*GameRef{}
+	for _, page := range category.Pages {
+		gameRefs = append(gameRefs, page.TopRight, page.CenterRight, page.BottomRight, page.TopLeft, page.CenterLeft, page.BottomLeft)
+	}
+
+	for _, gameRef := range gameRefs {
+		if gameRef != nil && gameRef.Path != "" {
+			gamePath := filepath.Join(filepath.Dir(filePath), gameRef.Path)
+			gamePath = filepath.Clean(gamePath) // Очистка пути
+			processJsonFile(gamePath)           // Рекурсивно загружаем игру
+		}
+	}
+}
+
+// Обработка JSON-файла игры
+func processGameJson(filePath string, bytes []byte) {
+	var game Game
+	if err := json.Unmarshal(bytes, &game); err != nil {
+		log.Println("Ошибка декодирования JSON игры:", err)
+		return
+	}
+
+	// Определяем категории по пути
+	categoryNames := getCategoryNamesFromPath(filePath)
+
+	// Добавляем игру в БД
+	var gameID int
+	err := db.QueryRow("INSERT INTO games (name_game, type, icon, json_path) VALUES ($1, $2, $3, $4) ON CONFLICT (name_game) DO UPDATE SET name_game=EXCLUDED.name_game RETURNING id_game",
+		game.Name, game.Type, game.Icon, filePath).Scan(&gameID)
+	if err != nil {
+		log.Println("Ошибка добавления игры:", err)
+		return
+	}
+
+	// Добавляем все категории, связанные с игрой
+	for _, categoryName := range categoryNames {
+		var categoryID int
+		err := db.QueryRow("INSERT INTO category (tag) VALUES ($1) ON CONFLICT (tag) DO UPDATE SET tag=EXCLUDED.tag RETURNING id_category", categoryName).Scan(&categoryID)
+		if err != nil {
+			log.Println("Ошибка добавления категории:", err)
+			continue
+		}
+
+		// Связываем игру с категорией
+		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, categoryID)
+		if err != nil {
+			log.Println("Ошибка связывания игры с категорией:", err)
+		}
+	}
+
+	// Добавляем изображения
+	addImage(gameID, game.Icon)
+	for _, page := range game.Pages {
+		addImage(gameID, page.MainImage)
+		for _, answer := range page.Answers {
+			addImage(gameID, answer.Image)
+		}
+	}
+
+	fmt.Println("Успешно добавлена игра:", game.Name)
+}
+
+// Функция добавления изображения в БД
+func addImage(gameID int, imageName string) {
+	if imageName == "" {
+		return
+	}
+	_, err := db.Exec("INSERT INTO images (id_game, image_name) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, imageName)
+	if err != nil {
+		log.Println("Ошибка добавления изображения:", err)
+	}
+}
+
+// Получаем категории из пути файла
+func getCategoryNamesFromPath(filePath string) []string {
+	dir := filepath.Dir(filePath)
+	return strings.Split(filepath.Base(dir), ", ") // Если категории разделены запятой
+}
+
+/*
 // Обход всех JSON-файлов в папке
 func processAllJsonFiles(rootDir string) error {
 	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
@@ -219,7 +389,7 @@ func processJsonFile(filePath string) {
 	for _, page := range game.Pages {
 		for _, answer := range page.Answers {
 			//imagePath := filepath.Join(filepath.Base(filepath.Dir(filePath)), answer.Image)
-			_, err := db.Exec("INSERT INTO images (id_game, image_name, is_correct) VALUES ($1, $2, $3)", gameID, answer.Image, answer.IsRight)
+			_, err := db.Exec("INSERT INTO images (id_game, image_name) VALUES ($1, $2)", gameID, answer.Image)
 			if err != nil {
 				log.Println("Ошибка добавления изображения:", err)
 			}
@@ -228,6 +398,7 @@ func processJsonFile(filePath string) {
 
 	fmt.Println("Успешно добавлена игра:", game.Name)
 }
+*/
 
 // Функция для загрузки картинок в БД
 /*func uploadImagesToDB(dir string) error {
