@@ -11,7 +11,6 @@ import (
 	"strings"
 )
 
-// Папка, где хранятся все изображения
 const imageDir = "/home/sofia/Документы/Menu" // путь к корневой папке
 
 type ErrorResponse struct {
@@ -19,7 +18,7 @@ type ErrorResponse struct {
 }
 
 // Обработчик для главной страницы
-func indexHandler(w http.ResponseWriter, r *http.Request) {
+/*func indexHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFiles("templates/index.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -30,27 +29,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 type Message struct {
 	Text string `json:"text"`
-}
-
-/*func apiHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Разрешаем запросы с React
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Content-Type", "application/json")
-
-	response := Message{Text: "Привет из Go!"}
-	json.NewEncoder(w).Encode(response)
-}*/
-
-/*func handleCors(w http.ResponseWriter, r *http.Request) bool {
-	(w).Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method == "OPTIONS" {
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
-		w.Header().Set("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Authorization, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers")
-		return true
-	}
-	return false
 }*/
 
 func handleCors(w http.ResponseWriter, r *http.Request) bool {
@@ -67,7 +45,7 @@ func handleCors(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // Обработчик для страницы регистрации
-func registerHandler(w http.ResponseWriter, r *http.Request) {
+/*func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
 	}
@@ -77,10 +55,10 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpl.Execute(w, nil)
-}
+}*/
 
 // Обработчик для отображения формы авторизации
-func handleLoginPage(w http.ResponseWriter, r *http.Request) {
+/*func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
 	}
@@ -90,7 +68,7 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpl.Execute(w, nil)
-}
+}*/
 
 // Обработчик поиска
 func searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +94,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	// Создаем структуру ответа
+	// Структура ответа
 	type GameWithImages struct {
 		ID     int      `json:"id"`
 		Name   string   `json:"name"`
@@ -160,7 +138,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// Поиск с Левентшейном -не рабочий
+// Поиск с Левентшейном
 func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -220,66 +198,6 @@ func unique(strings []string) []string {
 	return list
 }
 
-/*
-func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
-	if handleCors(w, r) {
-		return
-	}
-	query := r.URL.Query().Get("q") + "%"
-	if query == "" {
-		http.Error(w, "Query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	var games []string
-	sqlQuery := `
-	  	SELECT DISTINCT name_game
-		FROM games
-		WHERE name_game ILIKE $1
-		LIMIT 3;`
-	err := db.Select(&games, sqlQuery, query)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Если найдено меньше 3-х подсказок, добавляем результаты по Левенштейну
-	if len(games) < 3 {
-		query_one := r.URL.Query().Get("q")
-		levenshteinQuery := `
-            SELECT DISTINCT name_game
-            FROM games
-            WHERE levenshtein(name_game, $1) <= 4
-            LIMIT 3;`
-		var levenshteinGames []string
-		err = db.Select(&levenshteinGames, levenshteinQuery, query_one)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Объединяем результаты, удаляем дубликаты
-		games = append(games, levenshteinGames...)
-		games = unique(games)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(games)
-}
-
-// Функция для удаления дубликатов
-func unique(strings []string) []string {
-	keys := make(map[string]bool)
-	var list []string
-	for _, entry := range strings {
-		if _, exists := keys[entry]; !exists {
-			keys[entry] = true
-			list = append(list, entry)
-		}
-	}
-	return list
-}*/
-
 func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -291,10 +209,10 @@ func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Директория, где хранятся все изображения
+	// Корень
 	baseDir := "/home/sofia/Документы/Menu"
 
-	// Поиск файла в любой папке
+	// Поиск файла везде
 	var foundPath string
 	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -316,114 +234,10 @@ func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Отправляем файл пользователю
+	// Файл пользователю ->
 	http.ServeFile(w, r, foundPath)
 }
 
-/*
-// Обработчик поиска
-func searchHandler(w http.ResponseWriter, r *http.Request) {
-	if handleCors(w, r) {
-		return
-	}
-	query := r.URL.Query().Get("q")
-	if query == "" {
-		http.Error(w, "Query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	var categories []string
-	sqlQuery := `
-	  	SELECT DISTINCT category.tag
-		FROM category
-		JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
-		JOIN game ON accordance_game_category.id_game = game.id_game
-		WHERE game.name_game ILIKE $1;`
-	err := db.Select(&categories, sqlQuery, query)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	tmpl, err := template.ParseFiles("templates/search.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	tmpl.Execute(w, categories)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(categories)
-}
-*/
-
-// Обработчик поиска с лимитом подсказок 3
-/*
-func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
-	if handleCors(w, r) {
-		return
-	}
-	query := r.URL.Query().Get("q") + "%"
-	if query == "" {
-		http.Error(w, "Query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	var categories []string
-	sqlQuery := `
-	  	SELECT DISTINCT category.tag
-		FROM category
-		JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
-		JOIN game ON accordance_game_category.id_game = game.id_game
-		WHERE game.name_game ILIKE $1
-		LIMIT 3;`
-	err := db.Select(&categories, sqlQuery, query)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Если найдено меньше 3-х подсказок, выполняем второй запрос с использованием расстояния Левенштейна
-	if len(categories) < 3 {
-		query_one := r.URL.Query().Get("q")
-		levenshteinQuery := `
-            SELECT DISTINCT category.tag
-            FROM category
-            JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
-            JOIN game ON accordance_game_category.id_game = game.id_game
-            WHERE levenshtein(game.name_game, $1) <= 4
-            LIMIT 3;`
-
-		var levenshteinCategories []string
-		err = db.Select(&levenshteinCategories, levenshteinQuery, query_one)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Объединяем результаты
-		categories = append(categories, levenshteinCategories...)
-		// Удаляем дубликаты
-		categories = unique(categories)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(categories)
-}
-
-// Функция для удаления дубликатов из среза строк
-func unique(strings []string) []string {
-	keys := make(map[string]bool)
-	var list []string
-	for _, entry := range strings {
-		if _, value := keys[entry]; !value {
-			keys[entry] = true
-			list = append(list, entry)
-		}
-	}
-	return list
-}
-*/
 // Обработчик для регистрации нового пользователя
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
@@ -554,6 +368,95 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Функция получения списка файлов
+func listFiles(directory string) ([]string, error) {
+	files := []string{}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files = append(files, entry.Name())
+		}
+	}
+	return files, nil
+}
+
+// Получение json файла игры по запросу
+func gameHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	gameName := r.URL.Query().Get("name")
+	if gameName == "" {
+		http.Error(w, "Параметр 'name' обязателен", http.StatusBadRequest)
+		return
+	}
+
+	var jsonPath string
+	err := db.QueryRow("SELECT json_path FROM games WHERE name_game = $1", gameName).Scan(&jsonPath)
+	if err != nil {
+		http.Error(w, "Игра не найдена", http.StatusNotFound)
+		return
+	}
+
+	content, err := os.ReadFile(jsonPath)
+	if err != nil {
+		http.Error(w, "Не удалось прочитать JSON-файл", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(content)
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+////
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+/*func apiHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Разрешаем запросы с React
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	response := Message{Text: "Привет из Go!"}
+	json.NewEncoder(w).Encode(response)
+}*/
+
+/*func handleCors(w http.ResponseWriter, r *http.Request) bool {
+	(w).Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
+		w.Header().Set("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Authorization, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers")
+		return true
+	}
+	return false
+}*/
+
 // Обработчик для получения конкретного изображения
 /*func imageHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
@@ -575,19 +478,179 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, imagePath)
 
 }*/
-
-// Функция получения списка файлов
-func listFiles(directory string) ([]string, error) {
-	files := []string{}
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return nil, err
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+/*
+func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	query := r.URL.Query().Get("q") + "%"
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			files = append(files, entry.Name())
+	var games []string
+	sqlQuery := `
+	  	SELECT DISTINCT name_game
+		FROM games
+		WHERE name_game ILIKE $1
+		LIMIT 3;`
+	err := db.Select(&games, sqlQuery, query)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Если найдено меньше 3-х подсказок, добавляем результаты по Левенштейну
+	if len(games) < 3 {
+		query_one := r.URL.Query().Get("q")
+		levenshteinQuery := `
+            SELECT DISTINCT name_game
+            FROM games
+            WHERE levenshtein(name_game, $1) <= 4
+            LIMIT 3;`
+		var levenshteinGames []string
+		err = db.Select(&levenshteinGames, levenshteinQuery, query_one)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Объединяем результаты, удаляем дубликаты
+		games = append(games, levenshteinGames...)
+		games = unique(games)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(games)
+}
+
+// Функция для удаления дубликатов
+func unique(strings []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range strings {
+		if _, exists := keys[entry]; !exists {
+			keys[entry] = true
+			list = append(list, entry)
 		}
 	}
-	return files, nil
+	return list
+}*/
+
+/*
+// Обработчик поиска
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var categories []string
+	sqlQuery := `
+	  	SELECT DISTINCT category.tag
+		FROM category
+		JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
+		JOIN game ON accordance_game_category.id_game = game.id_game
+		WHERE game.name_game ILIKE $1;`
+	err := db.Select(&categories, sqlQuery, query)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tmpl, err := template.ParseFiles("templates/search.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tmpl.Execute(w, categories)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(categories)
 }
+*/
+
+// Обработчик поиска с лимитом подсказок 3
+/*
+func searchlimitHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	query := r.URL.Query().Get("q") + "%"
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var categories []string
+	sqlQuery := `
+	  	SELECT DISTINCT category.tag
+		FROM category
+		JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
+		JOIN game ON accordance_game_category.id_game = game.id_game
+		WHERE game.name_game ILIKE $1
+		LIMIT 3;`
+	err := db.Select(&categories, sqlQuery, query)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Если найдено меньше 3-х подсказок, выполняем второй запрос с использованием расстояния Левенштейна
+	if len(categories) < 3 {
+		query_one := r.URL.Query().Get("q")
+		levenshteinQuery := `
+            SELECT DISTINCT category.tag
+            FROM category
+            JOIN accordance_game_category ON category.id_category = accordance_game_category.id_category
+            JOIN game ON accordance_game_category.id_game = game.id_game
+            WHERE levenshtein(game.name_game, $1) <= 4
+            LIMIT 3;`
+
+		var levenshteinCategories []string
+		err = db.Select(&levenshteinCategories, levenshteinQuery, query_one)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Объединяем результаты
+		categories = append(categories, levenshteinCategories...)
+		// Удаляем дубликаты
+		categories = unique(categories)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(categories)
+}
+
+// Функция для удаления дубликатов из среза строк
+func unique(strings []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range strings {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+*/

@@ -153,9 +153,28 @@ type Answer struct {
 	IsRight bool   `json:"IsRight,omitempty"`
 	Image   string `json:"Image,omitempty"`
 	Phrase  string `json:"Phrase"`
+	Name    string `json:"Name,omitempty"`
 }
 
 type Answers []Answer
+
+func (a *Answers) UnmarshalJSON(data []byte) error {
+	// Попробуем сначала распарсить как массив
+	var multiple []Answer
+	if err := json.Unmarshal(data, &multiple); err == nil {
+		*a = multiple
+		return nil
+	}
+
+	// Если не удалось, пробуем как объект
+	var single Answer
+	if err := json.Unmarshal(data, &single); err == nil {
+		*a = []Answer{single}
+		return nil
+	}
+
+	return fmt.Errorf("не удалось разобрать Answers: неверный формат JSON")
+}
 
 type Page struct {
 	MainImage  string  `json:"MainImage"`
@@ -170,7 +189,9 @@ type Game struct {
 	Pages []Page `json:"Pages"`
 }
 
-// Подключение к базе данных (замени на свое подключение)
+var gamePathByName = make(map[string]string)
+
+// Подключение к базе данных
 
 // Обход всех JSON-файлов в папке
 func processAllJsonFiles(rootDir string) error {
@@ -328,6 +349,48 @@ func getCategoryNamesFromPath(filePath string) []string {
 	dir := filepath.Dir(filePath)
 	return strings.Split(filepath.Base(dir), ", ") // Если категории разделены запятой
 }
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
 
 /*
 // Обход всех JSON-файлов в папке

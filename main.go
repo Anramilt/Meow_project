@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 )
 
@@ -22,22 +21,24 @@ func main() {
 	//Добавление картинок в БД:
 	/*uploadImagesToDB(imageDir)*/
 
-	rootDir := "/home/sofia/Документы/Menu" // путь к корневой папке
+	/*rootDir := "/home/sofia/Документы/Menu" // путь к корневой папке
 	if err := processAllJsonFiles(rootDir); err != nil {
 		log.Fatal("Ошибка обработки файлов:", err)
-	}
+	}*/
 
 	//http.HandleFunc("/", handler)
 	//http.HandleFunc("/login", authHandler) //обработчик авторизации
-	http.HandleFunc("/", indexHandler)
+	//http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/search", searchHandler)
 	http.HandleFunc("/searchlimit", searchlimitHandler)
-	http.HandleFunc("/register", registerHandler)       // Страница регистрации
+	//http.HandleFunc("/register", registerHandler)       // Страница регистрации
 	http.HandleFunc("/handle-register", handleRegister) // Обработчик регистрации
-	http.HandleFunc("/login", handleLoginPage)
+	//http.HandleFunc("/login", handleLoginPage)
 	http.HandleFunc("/handle-login", handleLogin)
 	http.HandleFunc("/files", fileHandler)
 	http.HandleFunc("/images", imagesearchHandler)
+
+	http.HandleFunc("/game", gameHandler)
 	//http.HandleFunc("/api/message", apiHandler)
 
 	http.ListenAndServe(":8080", nil)
