@@ -7,6 +7,7 @@ import (
 
 func main() {
 	ConnectDB()
+	initVosk()
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	fmt.Println("Hello world!")
@@ -40,6 +41,9 @@ func main() {
 
 	http.HandleFunc("/game", gameHandler)
 	//http.HandleFunc("/api/message", apiHandler)
+
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
+	http.HandleFunc("/api/upload-voice", uploadVoiceHandler)
 
 	http.ListenAndServe(":8080", nil)
 }

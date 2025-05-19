@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -413,6 +414,154 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(content)
 }
 
+func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	if r.Method != "POST" {
+		sendErrorResponse(w, "Только POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		sendErrorResponse(w, "Ошибка чтения формы", http.StatusBadRequest)
+		return
+	}
+
+	file, handler, err := r.FormFile("voice")
+	if err != nil {
+		sendErrorResponse(w, "Не удалось получить файл", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	audioData, err := io.ReadAll(file)
+	if err != nil {
+		sendErrorResponse(w, "Ошибка чтения аудио", http.StatusInternalServerError)
+		return
+	}
+
+	// Сохраняем аудиофайл для отладки
+	debugFilePath := filepath.Join("/home/sofia/go/src/Meow_project/uploads", handler.Filename)
+	err = os.WriteFile(debugFilePath, audioData, 0644)
+	if err != nil {
+		log.Printf("Ошибка сохранения аудиофайла: %v", err)
+	} else {
+		log.Printf("Аудиофайл сохранён: %s, размер: %d байт", debugFilePath, len(audioData))
+	}
+
+	answersJson := r.FormValue("answers")
+	var correctAnswers []string
+	err = json.Unmarshal([]byte(answersJson), &correctAnswers)
+	if err != nil {
+		sendErrorResponse(w, "Ошибка парсинга ответов", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Полученные ответы: %v", correctAnswers)
+	result := Recognize(correctAnswers, audioData)
+	if len(result) == 0 {
+		log.Println("Распознавание не удалось")
+		sendErrorResponse(w, "Ничего не распознано", http.StatusOK)
+		return
+	}
+
+	isCorrect := false
+	userSaid := strings.TrimSpace(strings.ToLower(result[0].Text))
+	for _, ans := range correctAnswers {
+		if userSaid == strings.TrimSpace(strings.ToLower(ans)) {
+			isCorrect = true
+			break
+		}
+	}
+
+	resp := map[string]interface{}{
+		"correct":  isCorrect,
+		"userSaid": userSaid,
+		"gopScore": result[0].Value,
+		"category": result[0].Category,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Println("Ошибка отправки ответа:", err)
+		sendErrorResponse(w, "Ошибка сервера", http.StatusInternalServerError)
+	}
+}
+
+// Вспомогательная функция для отправки JSON-ошибок
+func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	resp := map[string]string{"error": message}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Println("Ошибка отправки JSON-ошибки:", err)
+	}
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+//
 //
 //
 //
