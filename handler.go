@@ -413,7 +413,6 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(content)
 }
-
 func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -430,7 +429,7 @@ func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, handler, err := r.FormFile("voice")
+	file, _, err := r.FormFile("voice")
 	if err != nil {
 		sendErrorResponse(w, "Не удалось получить файл", http.StatusBadRequest)
 		return
@@ -442,15 +441,7 @@ func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 		sendErrorResponse(w, "Ошибка чтения аудио", http.StatusInternalServerError)
 		return
 	}
-
-	// Сохраняем аудиофайл для отладки
-	debugFilePath := filepath.Join("/home/sofia/go/src/Meow_project/uploads", handler.Filename)
-	err = os.WriteFile(debugFilePath, audioData, 0644)
-	if err != nil {
-		log.Printf("Ошибка сохранения аудиофайла: %v", err)
-	} else {
-		log.Printf("Аудиофайл сохранён: %s, размер: %d байт", debugFilePath, len(audioData))
-	}
+	log.Printf("Получено аудио, размер: %d байт", len(audioData))
 
 	answersJson := r.FormValue("answers")
 	var correctAnswers []string
@@ -459,8 +450,8 @@ func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 		sendErrorResponse(w, "Ошибка парсинга ответов", http.StatusBadRequest)
 		return
 	}
-
 	log.Printf("Полученные ответы: %v", correctAnswers)
+
 	result := Recognize(correctAnswers, audioData)
 	if len(result) == 0 {
 		log.Println("Распознавание не удалось")
