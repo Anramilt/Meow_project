@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -37,9 +39,10 @@ func handleCors(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers")
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 
 	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK) // Здесь важно отправить корректный статус!
+		w.WriteHeader(http.StatusOK)
 		return true
 	}
 	return false
@@ -413,6 +416,7 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(content)
 }
+
 func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -443,16 +447,28 @@ func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Получено аудио, размер: %d байт", len(audioData))
 
+	// Конвертируем аудио в нужный формат
+	convertedData, err := convertAudioToWav(audioData)
+	if err != nil {
+		log.Printf("Ошибка конвертации аудио: %v", err)
+		sendErrorResponse(w, "Ошибка конвертации аудио", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Аудио конвертировано, размер: %d байт", len(convertedData))
+
 	answersJson := r.FormValue("answers")
+	//log.Println("Лог1", r)
 	var correctAnswers []string
+	//log.Println("Лог2", correctAnswers)
 	err = json.Unmarshal([]byte(answersJson), &correctAnswers)
 	if err != nil {
+		//log.Println(err)
 		sendErrorResponse(w, "Ошибка парсинга ответов", http.StatusBadRequest)
 		return
 	}
 	log.Printf("Полученные ответы: %v", correctAnswers)
 
-	result := Recognize(correctAnswers, audioData)
+	result := Recognize(correctAnswers, convertedData)
 	if len(result) == 0 {
 		log.Println("Распознавание не удалось")
 		sendErrorResponse(w, "Ничего не распознано", http.StatusOK)
@@ -481,9 +497,57 @@ func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Конвертация аудио с использованием временных файлов
+func convertAudioToWav(inputData []byte) ([]byte, error) {
+	// Создаём временный входной файл
+	inputFile, err := os.CreateTemp("", "input_audio_*.wav")
+	if err != nil {
+		log.Printf("Ошибка создания временного входного файла: %v", err)
+		return nil, err
+	}
+	inputPath := inputFile.Name()
+	defer os.Remove(inputPath) // Удаляем файл после использования
+
+	if _, err := inputFile.Write(inputData); err != nil {
+		log.Printf("Ошибка записи во временный входной файл: %v", err)
+		inputFile.Close()
+		return nil, err
+	}
+	inputFile.Close()
+
+	// Создаём временный выходной файл
+	outputFile, err := os.CreateTemp("", "output_audio_*.wav")
+	if err != nil {
+		log.Printf("Ошибка создания временного выходного файла: %v", err)
+		return nil, err
+	}
+	outputPath := outputFile.Name()
+	outputFile.Close()
+	defer os.Remove(outputPath) // Удаляем файл после использования
+
+	// Выполняем конвертацию с помощью ffmpeg
+	cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, "-ar", "16000", "-ac", "1", "-f", "wav", outputPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		log.Printf("FFmpeg error: %s", stderr.String())
+		return nil, err
+	}
+
+	// Читаем конвертированные данные
+	convertedData, err := os.ReadFile(outputPath)
+	if err != nil {
+		log.Printf("Ошибка чтения конвертированного файла: %v", err)
+		return nil, err
+	}
+
+	return convertedData, nil
+}
+
 // Вспомогательная функция для отправки JSON-ошибок
 func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 	w.WriteHeader(statusCode)
 	resp := map[string]string{"error": message}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
