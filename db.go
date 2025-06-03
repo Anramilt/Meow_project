@@ -179,6 +179,7 @@ func (a *Answers) UnmarshalJSON(data []byte) error {
 type Page struct {
 	MainImage  string  `json:"MainImage"`
 	MainPhrase string  `json:"MainPhrase"`
+	MainSound  string  `json:"MainSound"`
 	Answers    Answers `json:"Answers"`
 }
 
@@ -329,6 +330,12 @@ func processGameJson(filePath string, bytes []byte) {
 			addImage(gameID, answer.Image)
 		}
 	}
+	// Добавляем звуки
+	for _, page := range game.Pages {
+		if strings.HasSuffix(page.MainSound, ".wav") {
+			addSound(gameID, page.MainSound)
+		}
+	}
 
 	fmt.Println("Успешно добавлена игра:", game.Name)
 }
@@ -348,6 +355,22 @@ func addImage(gameID int, imageName string) {
 func getCategoryNamesFromPath(filePath string) []string {
 	dir := filepath.Dir(filePath)
 	return strings.Split(filepath.Base(dir), ", ") // Если категории разделены запятой
+}
+
+// Функция добавления звука в БД
+func addSound(gameID int, soundName string) {
+	if soundName == "" {
+		return
+	}
+	soundFile := strings.TrimSpace(filepath.Base(soundName)) // Извлекаем имя файла
+	if !strings.HasSuffix(soundFile, ".wav") {
+		return // Только .wav файлы
+	}
+
+	_, err := db.Exec("INSERT INTO sounds (id_game, sound_name) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, soundFile)
+	if err != nil {
+		log.Println("Ошибка добавления звука:", err)
+	}
 }
 
 //

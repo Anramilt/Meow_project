@@ -38,6 +38,7 @@ func main() {
 	http.HandleFunc("/handle-login", handleLogin)
 	http.HandleFunc("/files", fileHandler)
 	http.HandleFunc("/images", imagesearchHandler)
+	http.HandleFunc("/sound", soundsearchHandler)
 
 	http.HandleFunc("/game", gameHandler)
 	//http.HandleFunc("/api/message", apiHandler)

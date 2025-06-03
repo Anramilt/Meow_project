@@ -242,6 +242,46 @@ func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, foundPath)
 }
 
+func soundsearchHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	soundName := r.URL.Query().Get("name")
+	if soundName == "" {
+		http.Error(w, "Параметр 'name' обязателен", http.StatusBadRequest)
+		return
+	}
+
+	// Корень
+	baseDir := "/home/sofia/Документы/Menu"
+
+	// Поиск файла везде
+	var foundPath string
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.Contains(info.Name(), soundName) {
+			foundPath = path
+		}
+		return nil
+	})
+
+	if err != nil {
+		http.Error(w, "Ошибка при поиске файла", http.StatusInternalServerError)
+		return
+	}
+
+	if foundPath == "" {
+		http.Error(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	// Файл пользователю ->
+	http.ServeFile(w, r, foundPath)
+}
+
 // Обработчик для регистрации нового пользователя
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
@@ -417,6 +457,7 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(content)
 }
 
+// Распознавание голоса
 func uploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
