@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -20,12 +21,13 @@ func main() {
 	}*/
 
 	//Добавление картинок в БД:
-	/*uploadImagesToDB(imageDir)*/
+	//uploadImagesToDB(imageDir)
 
-	/*rootDir := "/home/sofia/Документы/Menu" // путь к корневой папке
+	/*rootDir := "/home/sofia/Документы/Menu" // путь к корневой папке */
+	rootDir := "/home/sofia/Test" // путь к корневой папке
 	if err := processAllJsonFiles(rootDir); err != nil {
 		log.Fatal("Ошибка обработки файлов:", err)
-	}*/
+	}
 
 	//http.HandleFunc("/", handler)
 	//http.HandleFunc("/login", authHandler) //обработчик авторизации

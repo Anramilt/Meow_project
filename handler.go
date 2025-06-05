@@ -14,7 +14,8 @@ import (
 	"strings"
 )
 
-const imageDir = "/home/sofia/Документы/Menu" // путь к корневой папке
+// const imageDir = "/home/sofia/Документы/Menu" // путь к корневой папке
+const imageDir = "/home/sofia/Test"
 
 type ErrorResponse struct {
 	Error string
@@ -202,6 +203,7 @@ func unique(strings []string) []string {
 	return list
 }
 
+/*
 func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -214,7 +216,8 @@ func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Корень
-	baseDir := "/home/sofia/Документы/Menu"
+	//baseDir := "/home/sofia/Документы/Menu"
+	baseDir := "/home/sofia/Test"
 
 	// Поиск файла везде
 	var foundPath string
@@ -240,6 +243,51 @@ func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Файл пользователю ->
 	http.ServeFile(w, r, foundPath)
+}*/
+
+func imagesearchHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	baseDir := "/home/sofia/Test"
+
+	// 1. Если передан полный путь
+	imagePath := r.URL.Query().Get("path")
+	if imagePath != "" {
+		fullPath := filepath.Join(baseDir, imagePath)
+		if _, err := os.Stat(fullPath); err == nil {
+			http.ServeFile(w, r, fullPath)
+			return
+		}
+		http.Error(w, "Файл не найден (по path)", http.StatusNotFound)
+		return
+	}
+
+	// 2. Если передано просто имя
+	imageName := r.URL.Query().Get("name")
+	if imageName != "" {
+		var found string
+		_ = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && info.Name() == imageName {
+				found = path
+				return io.EOF // останавливаем Walk
+			}
+			return nil
+		})
+		if found != "" {
+			http.ServeFile(w, r, found)
+			return
+		}
+		http.Error(w, "Файл не найден (по name)", http.StatusNotFound)
+		return
+	}
+
+	// Если ни path, ни name не указаны
+	http.Error(w, "Параметр 'path' или 'name' обязателен", http.StatusBadRequest)
 }
 
 func soundsearchHandler(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +302,8 @@ func soundsearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Корень
-	baseDir := "/home/sofia/Документы/Menu"
+	//baseDir := "/home/sofia/Документы/Menu"
+	baseDir := "/home/sofia/Test"
 
 	// Поиск файла везде
 	var foundPath string

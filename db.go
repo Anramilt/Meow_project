@@ -287,6 +287,7 @@ func processMenuJson(filePath string, bytes []byte) {
 }
 
 // Обработка JSON-файла игры
+/*
 func processGameJson(filePath string, bytes []byte) {
 	var game Game
 	if err := json.Unmarshal(bytes, &game); err != nil {
@@ -338,14 +339,163 @@ func processGameJson(filePath string, bytes []byte) {
 	}
 
 	fmt.Println("Успешно добавлена игра:", game.Name)
-}
-
-// Функция добавления изображения в БД
-func addImage(gameID int, imageName string) {
-	if imageName == "" {
+}*/
+/*
+func processGameJson(filePath string, bytes []byte) {
+	var game Game
+	if err := json.Unmarshal(bytes, &game); err != nil {
+		log.Println("Ошибка декодирования JSON игры:", err)
 		return
 	}
-	_, err := db.Exec("INSERT INTO images (id_game, image_name) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, imageName)
+
+	// Определяем категории по пути
+	categoryNames := getCategoryNamesFromPath(filePath)
+
+	// Добавляем игру в БД
+	var gameID int
+	err := db.QueryRow("INSERT INTO games (name_game, type, icon, json_path) VALUES ($1, $2, $3, $4) ON CONFLICT (name_game) DO UPDATE SET name_game=EXCLUDED.name_game RETURNING id_game",
+		game.Name, game.Type, game.Icon, filePath).Scan(&gameID)
+	if err != nil {
+		log.Println("Ошибка добавления игры:", err)
+		return
+	}
+
+	// Добавляем все категории, связанные с игрой
+	for _, categoryName := range categoryNames {
+		var categoryID int
+		err := db.QueryRow("INSERT INTO category (tag) VALUES ($1) ON CONFLICT (tag) DO UPDATE SET tag=EXCLUDED.tag RETURNING id_category", categoryName).Scan(&categoryID)
+		if err != nil {
+			log.Println("Ошибка добавления категории:", err)
+			continue
+		}
+
+		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, categoryID)
+		if err != nil {
+			log.Println("Ошибка связывания игры с категорией:", err)
+		}
+	}
+
+	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(filePath))
+	if err != nil {
+		log.Println("Ошибка пути:", err)
+		return
+	}
+
+	if game.Icon != "" {
+		iconPath := filepath.Join(relPath, game.Icon)
+		addImage(gameID, iconPath)
+	}
+
+	for _, page := range game.Pages {
+		if page.MainImage != "" {
+			mainImagePath := filepath.Join(relPath, page.MainImage)
+			addImage(gameID, mainImagePath)
+		}
+		for _, answer := range page.Answers {
+			if answer.Image != "" {
+				answerImagePath := filepath.Join(relPath, answer.Image)
+				addImage(gameID, answerImagePath)
+			}
+		}
+	}
+
+	// Добавляем звуки
+	for _, page := range game.Pages {
+		if page.MainSound != "" {
+			soundPath := filepath.Join(relPath, page.MainSound)
+			addSound(gameID, soundPath)
+		}
+	}
+
+	fmt.Println("Успешно добавлена игра:", game.Name)
+}*/
+func processGameJson(filePath string, bytes []byte) {
+	var game Game
+	if err := json.Unmarshal(bytes, &game); err != nil {
+		log.Println("Ошибка декодирования JSON игры:", err)
+		return
+	}
+
+	// Получаем относительный путь от корня
+	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(filePath))
+	if err != nil {
+		log.Println("Ошибка пути:", err)
+		return
+	}
+	relPath = filepath.ToSlash(relPath)
+
+	// Формируем полный путь до иконки
+	fullIconPath := ""
+	if game.Icon != "" {
+		fullIconPath = filepath.ToSlash(filepath.Join(relPath, game.Icon))
+	}
+
+	// Добавляем игру в БД (с уже составленным относительным путём иконки)
+	var gameID int
+	err = db.QueryRow(`
+		INSERT INTO games (name_game, type, icon, json_path)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (name_game) DO UPDATE SET icon = EXCLUDED.icon
+		RETURNING id_game`,
+		game.Name, game.Type, fullIconPath, filePath,
+	).Scan(&gameID)
+	if err != nil {
+		log.Println("Ошибка добавления игры:", err)
+		return
+	}
+
+	// Добавляем категории
+	categoryNames := getCategoryNamesFromPath(filePath)
+	for _, categoryName := range categoryNames {
+		var categoryID int
+		err := db.QueryRow("INSERT INTO category (tag) VALUES ($1) ON CONFLICT (tag) DO UPDATE SET tag=EXCLUDED.tag RETURNING id_category", categoryName).Scan(&categoryID)
+		if err != nil {
+			log.Println("Ошибка добавления категории:", err)
+			continue
+		}
+
+		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, categoryID)
+		if err != nil {
+			log.Println("Ошибка связывания игры с категорией:", err)
+		}
+	}
+
+	// Добавляем изображения
+	if fullIconPath != "" {
+		addImage(gameID, fullIconPath)
+	}
+	for _, page := range game.Pages {
+		if page.MainImage != "" {
+			mainImagePath := filepath.ToSlash(filepath.Join(relPath, page.MainImage))
+			addImage(gameID, mainImagePath)
+		}
+		for _, answer := range page.Answers {
+			if answer.Image != "" {
+				answerImagePath := filepath.ToSlash(filepath.Join(relPath, answer.Image))
+				addImage(gameID, answerImagePath)
+			}
+		}
+	}
+
+	// Добавляем звуки
+	for _, page := range game.Pages {
+		if page.MainSound != "" {
+			soundPath := filepath.ToSlash(filepath.Join(relPath, page.MainSound))
+			addSound(gameID, soundPath)
+		}
+	}
+
+	fmt.Println("Успешно добавлена игра:", game.Name)
+}
+
+func addImage(gameID int, imagePath string) {
+	if imagePath == "" {
+		return
+	}
+	// Сохраняем полный относительный путь
+	relativePath := filepath.ToSlash(imagePath) // Для совместимости
+	_, err := db.Exec("INSERT INTO images (id_game, image_name, full_path) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		gameID, filepath.Base(imagePath), relativePath)
 	if err != nil {
 		log.Println("Ошибка добавления изображения:", err)
 	}
