@@ -8,6 +8,7 @@ import (
 
 func main() {
 	ConnectDB()
+
 	initVosk()
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
@@ -28,6 +29,7 @@ func main() {
 	if err := processAllJsonFiles(rootDir); err != nil {
 		log.Fatal("Ошибка обработки файлов:", err)
 	}
+	//setupAPI(db)
 
 	//http.HandleFunc("/", handler)
 	//http.HandleFunc("/login", authHandler) //обработчик авторизации
@@ -47,6 +49,9 @@ func main() {
 
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 	http.HandleFunc("/api/upload-voice", uploadVoiceHandler)
+
+	http.HandleFunc("/api/menu", menuDownloadHandler)
+	fmt.Println("Gut")
 
 	http.ListenAndServe(":8080", nil)
 }

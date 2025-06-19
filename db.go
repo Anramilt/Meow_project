@@ -158,6 +158,13 @@ type Answer struct {
 
 type Answers []Answer
 
+// Гибкий тип, поддерживает и []string, и []Answer
+type FlexibleAnswers struct {
+	StringAnswers []string
+	ObjectAnswers []Answer
+}
+
+/*
 func (a *Answers) UnmarshalJSON(data []byte) error {
 	// Попробуем сначала распарсить как массив
 	var multiple []Answer
@@ -174,13 +181,38 @@ func (a *Answers) UnmarshalJSON(data []byte) error {
 	}
 
 	return fmt.Errorf("не удалось разобрать Answers: неверный формат JSON")
+}*/
+
+func (f *FlexibleAnswers) UnmarshalJSON(data []byte) error {
+	// Пробуем как массив строк
+	var strs []string
+	if err := json.Unmarshal(data, &strs); err == nil {
+		f.StringAnswers = strs
+		return nil
+	}
+
+	// Пробуем как массив объектов
+	var objs []Answer
+	if err := json.Unmarshal(data, &objs); err == nil {
+		f.ObjectAnswers = objs
+		return nil
+	}
+
+	return fmt.Errorf("не удалось разобрать Answers: неверный формат")
 }
 
+// type Page struct {
+// 	MainImage  string  `json:"MainImage"`
+// 	MainPhrase string  `json:"MainPhrase"`
+// 	MainSound  string  `json:"MainSound"`
+// 	Answers    Answers `json:"Answers"`
+// }
+
 type Page struct {
-	MainImage  string  `json:"MainImage"`
-	MainPhrase string  `json:"MainPhrase"`
-	MainSound  string  `json:"MainSound"`
-	Answers    Answers `json:"Answers"`
+	MainImage  string          `json:"MainImage"`
+	MainPhrase string          `json:"MainPhrase"`
+	MainSound  string          `json:"MainSound"`
+	Answers    FlexibleAnswers `json:"Answers"`
 }
 
 type Game struct {
@@ -190,9 +222,18 @@ type Game struct {
 	Pages []Page `json:"Pages"`
 }
 
+var processedFiles = make(map[string]bool) // Кэш обработанных файлов
 var gamePathByName = make(map[string]string)
 
 // Подключение к базе данных
+
+// Вспомогательная функция для передачи NULL в SQL, если parentCategoryID == 0
+func nullIfZero(id int) interface{} {
+	if id == 0 {
+		return nil
+	}
+	return id
+}
 
 // Обход всех JSON-файлов в папке
 func processAllJsonFiles(rootDir string) error {
@@ -204,13 +245,19 @@ func processAllJsonFiles(rootDir string) error {
 			return nil
 		}
 		fmt.Println("Обрабатываю файл:", path)
-		processJsonFile(path)
+		processJsonFile(path, 0) // 0 означает отсутствие родительской категории для корневого меню
 		return nil
 	})
 }
 
 // Обработка одного JSON-файла
-func processJsonFile(filePath string) {
+func processJsonFile(filePath string, parentCategoryID int) {
+	if processedFiles[filePath] {
+		fmt.Println("Файл уже обработан:", filePath)
+		return
+	}
+	processedFiles[filePath] = true
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		log.Println("Ошибка открытия файла:", err)
@@ -224,7 +271,6 @@ func processJsonFile(filePath string) {
 		return
 	}
 
-	// Определяем тип JSON-файла (игра или категория)
 	var temp struct {
 		Type string `json:"Type"`
 	}
@@ -233,16 +279,17 @@ func processJsonFile(filePath string) {
 		return
 	}
 
-	if temp.Type == "SubCategory" {
-		processMenuJson(filePath, bytes)
+	if temp.Type == "Menu" || temp.Type == "SubCategory" {
+		processMenuJson(filePath, bytes, parentCategoryID)
 	} else {
-		processGameJson(filePath, bytes)
+		processGameJson(filePath, bytes, parentCategoryID)
 	}
 }
 
-// Обработка JSON-файла категории (меню)
-func processMenuJson(filePath string, bytes []byte) {
+// Обработка JSON-файла категории (меню или подкатегории)
+func processMenuJson(filePath string, bytes []byte, parentCategoryID int) {
 	var category struct {
+		Type      string `json:"Type"`
 		Name      string `json:"Name"`
 		MainImage string `json:"MainImage"`
 		Pages     []struct {
@@ -260,18 +307,29 @@ func processMenuJson(filePath string, bytes []byte) {
 		return
 	}
 
-	// Добавляем категорию в БД
+	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(filePath))
+	if err != nil {
+		log.Println("Ошибка получения относительного пути:", err)
+		return
+	}
+	relPath = filepath.ToSlash(relPath)
+	fullIconPath := ""
+	if category.MainImage != "" {
+		fullIconPath = filepath.ToSlash(filepath.Join(relPath, category.MainImage))
+	}
+
 	var categoryID int
-	err := db.QueryRow("INSERT INTO category (tag, icon) VALUES ($1, $2) ON CONFLICT (tag) DO UPDATE SET icon=EXCLUDED.icon RETURNING id_category",
-		category.Name, category.MainImage).Scan(&categoryID)
+	err = db.QueryRow(
+		"INSERT INTO category (tag, icon, parent_id) VALUES ($1, $2, $3) ON CONFLICT (tag) DO UPDATE SET icon=EXCLUDED.icon, parent_id=EXCLUDED.parent_id RETURNING id_category",
+		category.Name, fullIconPath, nullIfZero(parentCategoryID),
+	).Scan(&categoryID)
 	if err != nil {
 		log.Println("Ошибка добавления категории:", err)
 		return
 	}
 
-	fmt.Println("Категория добавлена:", category.Name)
+	fmt.Println("Категория добавлена:", category.Name, "с parent_id:", parentCategoryID)
 
-	// Обрабатываем вложенные игры
 	gameRefs := []*GameRef{}
 	for _, page := range category.Pages {
 		gameRefs = append(gameRefs, page.TopRight, page.CenterRight, page.BottomRight, page.TopLeft, page.CenterLeft, page.BottomLeft)
@@ -280,8 +338,16 @@ func processMenuJson(filePath string, bytes []byte) {
 	for _, gameRef := range gameRefs {
 		if gameRef != nil && gameRef.Path != "" {
 			gamePath := filepath.Join(filepath.Dir(filePath), gameRef.Path)
-			gamePath = filepath.Clean(gamePath) // Очистка пути
-			processJsonFile(gamePath)           // Рекурсивно загружаем игру
+			gamePath = filepath.Clean(gamePath)
+			if _, err := os.Stat(gamePath); os.IsNotExist(err) {
+				log.Println("Файл не существует:", gamePath)
+				continue
+			}
+			if gameRef.Type == "SubCategory" {
+				processJsonFile(gamePath, categoryID)
+			} else {
+				processJsonFile(gamePath, categoryID)
+			}
 		}
 	}
 }
@@ -409,14 +475,15 @@ func processGameJson(filePath string, bytes []byte) {
 
 	fmt.Println("Успешно добавлена игра:", game.Name)
 }*/
-func processGameJson(filePath string, bytes []byte) {
+
+// Обработка JSON-файла игры
+func processGameJson(filePath string, bytes []byte, parentCategoryID int) {
 	var game Game
 	if err := json.Unmarshal(bytes, &game); err != nil {
 		log.Println("Ошибка декодирования JSON игры:", err)
 		return
 	}
 
-	// Получаем относительный путь от корня
 	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(filePath))
 	if err != nil {
 		log.Println("Ошибка пути:", err)
@@ -424,18 +491,16 @@ func processGameJson(filePath string, bytes []byte) {
 	}
 	relPath = filepath.ToSlash(relPath)
 
-	// Формируем полный путь до иконки
 	fullIconPath := ""
 	if game.Icon != "" {
 		fullIconPath = filepath.ToSlash(filepath.Join(relPath, game.Icon))
 	}
 
-	// Добавляем игру в БД (с уже составленным относительным путём иконки)
 	var gameID int
 	err = db.QueryRow(`
 		INSERT INTO games (name_game, type, icon, json_path)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (name_game) DO UPDATE SET icon = EXCLUDED.icon
+		ON CONFLICT (name_game) DO UPDATE SET icon=EXCLUDED.icon, json_path=EXCLUDED.json_path
 		RETURNING id_game`,
 		game.Name, game.Type, fullIconPath, filePath,
 	).Scan(&gameID)
@@ -444,23 +509,13 @@ func processGameJson(filePath string, bytes []byte) {
 		return
 	}
 
-	// Добавляем категории
-	categoryNames := getCategoryNamesFromPath(filePath)
-	for _, categoryName := range categoryNames {
-		var categoryID int
-		err := db.QueryRow("INSERT INTO category (tag) VALUES ($1) ON CONFLICT (tag) DO UPDATE SET tag=EXCLUDED.tag RETURNING id_category", categoryName).Scan(&categoryID)
-		if err != nil {
-			log.Println("Ошибка добавления категории:", err)
-			continue
-		}
-
-		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, categoryID)
+	if parentCategoryID != 0 {
+		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, parentCategoryID)
 		if err != nil {
 			log.Println("Ошибка связывания игры с категорией:", err)
 		}
 	}
 
-	// Добавляем изображения
 	if fullIconPath != "" {
 		addImage(gameID, fullIconPath)
 	}
@@ -469,7 +524,7 @@ func processGameJson(filePath string, bytes []byte) {
 			mainImagePath := filepath.ToSlash(filepath.Join(relPath, page.MainImage))
 			addImage(gameID, mainImagePath)
 		}
-		for _, answer := range page.Answers {
+		for _, answer := range page.Answers.ObjectAnswers {
 			if answer.Image != "" {
 				answerImagePath := filepath.ToSlash(filepath.Join(relPath, answer.Image))
 				addImage(gameID, answerImagePath)
@@ -477,7 +532,6 @@ func processGameJson(filePath string, bytes []byte) {
 		}
 	}
 
-	// Добавляем звуки
 	for _, page := range game.Pages {
 		if page.MainSound != "" {
 			soundPath := filepath.ToSlash(filepath.Join(relPath, page.MainSound))
