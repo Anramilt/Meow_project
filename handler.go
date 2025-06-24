@@ -645,6 +645,27 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 	}
 }
 
+func menuHandler(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+
+	// Путь к New_menu.json
+	menuPath := "/home/sofia/Test/New_menu.json"
+
+	// Читаем файл
+	content, err := os.ReadFile(menuPath)
+	if err != nil {
+		http.Error(w, "Не удалось прочитать файл меню", http.StatusInternalServerError)
+		return
+	}
+
+	// Устанавливаем заголовки и отправляем JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(content)
+}
+
+/*
 func menuDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
@@ -660,7 +681,7 @@ func menuDownloadHandler(w http.ResponseWriter, r *http.Request) {
 				FROM category c
 				JOIN category_tree ct ON c.parent_id = ct.id_category
 			)
-			SELECT 
+			SELECT
 				ct.id_category, ct.tag, ct.icon, ct.parent_id, ct.level,
 				g.id_game, g.name_game, g.type, g.icon AS game_icon, g.json_path
 			FROM category_tree ct
@@ -700,7 +721,7 @@ func menuDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(items)
 }
-
+*/
 //
 //
 //

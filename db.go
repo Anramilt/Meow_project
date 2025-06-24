@@ -164,25 +164,6 @@ type FlexibleAnswers struct {
 	ObjectAnswers []Answer
 }
 
-/*
-func (a *Answers) UnmarshalJSON(data []byte) error {
-	// Попробуем сначала распарсить как массив
-	var multiple []Answer
-	if err := json.Unmarshal(data, &multiple); err == nil {
-		*a = multiple
-		return nil
-	}
-
-	// Если не удалось, пробуем как объект
-	var single Answer
-	if err := json.Unmarshal(data, &single); err == nil {
-		*a = []Answer{single}
-		return nil
-	}
-
-	return fmt.Errorf("не удалось разобрать Answers: неверный формат JSON")
-}*/
-
 func (f *FlexibleAnswers) UnmarshalJSON(data []byte) error {
 	// Пробуем как массив строк
 	var strs []string
@@ -201,13 +182,6 @@ func (f *FlexibleAnswers) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("не удалось разобрать Answers: неверный формат")
 }
 
-// type Page struct {
-// 	MainImage  string  `json:"MainImage"`
-// 	MainPhrase string  `json:"MainPhrase"`
-// 	MainSound  string  `json:"MainSound"`
-// 	Answers    Answers `json:"Answers"`
-// }
-
 type Page struct {
 	MainImage  string          `json:"MainImage"`
 	MainPhrase string          `json:"MainPhrase"`
@@ -220,6 +194,19 @@ type Game struct {
 	Icon  string `json:"Icon,omitempty"`
 	Type  string `json:"Type"`
 	Pages []Page `json:"Pages"`
+}
+
+type MenuEntry struct {
+	NameMenu string      `json:"NameMenu"`
+	Type     string      `json:"Type"`
+	Icon     string      `json:"Icon"`
+	Path     string      `json:"Path"`
+	SubMenu  []MenuEntry `json:"SubMenu,omitempty"`
+}
+
+type NewMenuJson struct {
+	Type  string      `json:"Type"`
+	Pages []MenuEntry `json:"InteractiveGames"`
 }
 
 var processedFiles = make(map[string]bool) // Кэш обработанных файлов
@@ -280,9 +267,73 @@ func processJsonFile(filePath string, parentCategoryID int) {
 	}
 
 	if temp.Type == "Menu" || temp.Type == "SubCategory" {
+		if strings.Contains(filePath, "New_menu.json") {
+			processNewMenuJson(filePath, bytes, parentCategoryID)
+			return
+		}
 		processMenuJson(filePath, bytes, parentCategoryID)
 	} else {
 		processGameJson(filePath, bytes, parentCategoryID)
+	}
+}
+
+func processNewMenuJson(filePath string, bytes []byte, parentCategoryID int) {
+	var menu NewMenuJson
+	if err := json.Unmarshal(bytes, &menu); err != nil {
+		log.Println("Ошибка разбора NewMenuJson:", err)
+		return
+	}
+
+	// Обработка верхнего уровня (все entries — это меню или игры)
+	for _, entry := range menu.Pages {
+		processMenuEntry(entry, filePath, parentCategoryID)
+	}
+}
+
+func processMenuEntry(entry MenuEntry, basePath string, parentCategoryID int) {
+	// Определяем путь к JSON-файлу игры или подменю
+	entryPath := filepath.Join(filepath.Dir(basePath), entry.Path)
+	entryPath = filepath.Clean(entryPath)
+
+	// Получаем относительный путь к иконке (если есть)
+	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(entryPath))
+	if err != nil {
+		log.Println("Ошибка относительного пути:", err)
+		return
+	}
+	relPath = filepath.ToSlash(relPath)
+	iconPath := ""
+	if entry.Icon != "" {
+		iconPath = filepath.ToSlash(filepath.Join(relPath, entry.Icon))
+	}
+
+	if entry.Type == "submenu" {
+		// Вставляем подкатегорию
+		var categoryID int
+		err := db.QueryRow(
+			`INSERT INTO category (tag, icon, parent_id)
+			 VALUES ($1, $2, $3)
+			 ON CONFLICT (tag) DO UPDATE SET icon=EXCLUDED.icon, parent_id=EXCLUDED.parent_id
+			 RETURNING id_category`,
+			entry.NameMenu, iconPath, nullIfZero(parentCategoryID),
+		).Scan(&categoryID)
+		if err != nil {
+			log.Println("Ошибка вставки подкатегории:", err)
+			return
+		}
+		fmt.Println("Добавлена категория:", entry.NameMenu)
+
+		// Обрабатываем вложенные подменю или игры
+		for _, subEntry := range entry.SubMenu {
+			processMenuEntry(subEntry, filepath.Dir(entryPath), categoryID)
+		}
+	} else if entry.Type == "game" {
+		// Обработка JSON-файла игры
+		if _, err := os.Stat(entryPath); os.IsNotExist(err) {
+			log.Println("Файл игры не найден:", entryPath)
+			return
+		}
+		processJsonFile(entryPath, parentCategoryID)
 	}
 }
 
@@ -351,6 +402,125 @@ func processMenuJson(filePath string, bytes []byte, parentCategoryID int) {
 		}
 	}
 }
+
+// Обработка JSON-файла игры
+func processGameJson(filePath string, bytes []byte, parentCategoryID int) {
+	var game Game
+	if err := json.Unmarshal(bytes, &game); err != nil {
+		log.Println("Ошибка декодирования JSON игры:", err)
+		return
+	}
+
+	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(filePath))
+	if err != nil {
+		log.Println("Ошибка пути:", err)
+		return
+	}
+	relPath = filepath.ToSlash(relPath)
+
+	fullIconPath := ""
+	if game.Icon != "" {
+		fullIconPath = filepath.ToSlash(filepath.Join(relPath, game.Icon))
+	}
+
+	var gameID int
+	err = db.QueryRow(`
+		INSERT INTO games (name_game, type, icon, json_path)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (name_game) DO UPDATE SET icon=EXCLUDED.icon, json_path=EXCLUDED.json_path
+		RETURNING id_game`,
+		game.Name, game.Type, fullIconPath, filePath,
+	).Scan(&gameID)
+	if err != nil {
+		log.Println("Ошибка добавления игры:", err)
+		return
+	}
+
+	if parentCategoryID != 0 {
+		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, parentCategoryID)
+		if err != nil {
+			log.Println("Ошибка связывания игры с категорией:", err)
+		}
+	}
+
+	if fullIconPath != "" {
+		addImage(gameID, fullIconPath)
+	}
+	for _, page := range game.Pages {
+		if page.MainImage != "" {
+			mainImagePath := filepath.ToSlash(filepath.Join(relPath, page.MainImage))
+			addImage(gameID, mainImagePath)
+		}
+		for _, answer := range page.Answers.ObjectAnswers {
+			if answer.Image != "" {
+				answerImagePath := filepath.ToSlash(filepath.Join(relPath, answer.Image))
+				addImage(gameID, answerImagePath)
+			}
+		}
+	}
+
+	for _, page := range game.Pages {
+		if page.MainSound != "" {
+			soundPath := filepath.ToSlash(filepath.Join(relPath, page.MainSound))
+			addSound(gameID, soundPath)
+		}
+	}
+
+	fmt.Println("Успешно добавлена игра:", game.Name)
+}
+
+func addImage(gameID int, imagePath string) {
+	if imagePath == "" {
+		return
+	}
+	// Сохраняем полный относительный путь
+	relativePath := filepath.ToSlash(imagePath) // Для совместимости
+	_, err := db.Exec("INSERT INTO images (id_game, image_name, full_path) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		gameID, filepath.Base(imagePath), relativePath)
+	if err != nil {
+		log.Println("Ошибка добавления изображения:", err)
+	}
+}
+
+// Получаем категории из пути файла
+func getCategoryNamesFromPath(filePath string) []string {
+	dir := filepath.Dir(filePath)
+	return strings.Split(filepath.Base(dir), ", ") // Если категории разделены запятой
+}
+
+// Функция добавления звука в БД
+func addSound(gameID int, soundName string) {
+	if soundName == "" {
+		return
+	}
+	soundFile := strings.TrimSpace(filepath.Base(soundName)) // Извлекаем имя файла
+	if !strings.HasSuffix(soundFile, ".wav") {
+		return // Только .wav файлы
+	}
+
+	_, err := db.Exec("INSERT INTO sounds (id_game, sound_name) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, soundFile)
+	if err != nil {
+		log.Println("Ошибка добавления звука:", err)
+	}
+}
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
+
+//
+//
+//
+//
+//
 
 // Обработка JSON-файла игры
 /*
@@ -475,126 +645,6 @@ func processGameJson(filePath string, bytes []byte) {
 
 	fmt.Println("Успешно добавлена игра:", game.Name)
 }*/
-
-// Обработка JSON-файла игры
-func processGameJson(filePath string, bytes []byte, parentCategoryID int) {
-	var game Game
-	if err := json.Unmarshal(bytes, &game); err != nil {
-		log.Println("Ошибка декодирования JSON игры:", err)
-		return
-	}
-
-	relPath, err := filepath.Rel("/home/sofia/Test", filepath.Dir(filePath))
-	if err != nil {
-		log.Println("Ошибка пути:", err)
-		return
-	}
-	relPath = filepath.ToSlash(relPath)
-
-	fullIconPath := ""
-	if game.Icon != "" {
-		fullIconPath = filepath.ToSlash(filepath.Join(relPath, game.Icon))
-	}
-
-	var gameID int
-	err = db.QueryRow(`
-		INSERT INTO games (name_game, type, icon, json_path)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (name_game) DO UPDATE SET icon=EXCLUDED.icon, json_path=EXCLUDED.json_path
-		RETURNING id_game`,
-		game.Name, game.Type, fullIconPath, filePath,
-	).Scan(&gameID)
-	if err != nil {
-		log.Println("Ошибка добавления игры:", err)
-		return
-	}
-
-	if parentCategoryID != 0 {
-		_, err = db.Exec("INSERT INTO game_category (id_game, id_category) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, parentCategoryID)
-		if err != nil {
-			log.Println("Ошибка связывания игры с категорией:", err)
-		}
-	}
-
-	if fullIconPath != "" {
-		addImage(gameID, fullIconPath)
-	}
-	for _, page := range game.Pages {
-		if page.MainImage != "" {
-			mainImagePath := filepath.ToSlash(filepath.Join(relPath, page.MainImage))
-			addImage(gameID, mainImagePath)
-		}
-		for _, answer := range page.Answers.ObjectAnswers {
-			if answer.Image != "" {
-				answerImagePath := filepath.ToSlash(filepath.Join(relPath, answer.Image))
-				addImage(gameID, answerImagePath)
-			}
-		}
-	}
-
-	for _, page := range game.Pages {
-		if page.MainSound != "" {
-			soundPath := filepath.ToSlash(filepath.Join(relPath, page.MainSound))
-			addSound(gameID, soundPath)
-		}
-	}
-
-	fmt.Println("Успешно добавлена игра:", game.Name)
-}
-
-func addImage(gameID int, imagePath string) {
-	if imagePath == "" {
-		return
-	}
-	// Сохраняем полный относительный путь
-	relativePath := filepath.ToSlash(imagePath) // Для совместимости
-	_, err := db.Exec("INSERT INTO images (id_game, image_name, full_path) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-		gameID, filepath.Base(imagePath), relativePath)
-	if err != nil {
-		log.Println("Ошибка добавления изображения:", err)
-	}
-}
-
-// Получаем категории из пути файла
-func getCategoryNamesFromPath(filePath string) []string {
-	dir := filepath.Dir(filePath)
-	return strings.Split(filepath.Base(dir), ", ") // Если категории разделены запятой
-}
-
-// Функция добавления звука в БД
-func addSound(gameID int, soundName string) {
-	if soundName == "" {
-		return
-	}
-	soundFile := strings.TrimSpace(filepath.Base(soundName)) // Извлекаем имя файла
-	if !strings.HasSuffix(soundFile, ".wav") {
-		return // Только .wav файлы
-	}
-
-	_, err := db.Exec("INSERT INTO sounds (id_game, sound_name) VALUES ($1, $2) ON CONFLICT DO NOTHING", gameID, soundFile)
-	if err != nil {
-		log.Println("Ошибка добавления звука:", err)
-	}
-}
-
-//
-//
-//
-//
-//
-
-//
-//
-//
-//
-//
-
-//
-//
-//
-//
-//
-
 //
 //
 //

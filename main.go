@@ -47,10 +47,12 @@ func main() {
 	http.HandleFunc("/game", gameHandler)
 	//http.HandleFunc("/api/message", apiHandler)
 
-	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
+	/*http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 	http.HandleFunc("/api/upload-voice", uploadVoiceHandler)
+	*/
 
-	http.HandleFunc("/api/menu", menuDownloadHandler)
+	http.HandleFunc("/menu", menuHandler)
+	//http.HandleFunc("/api/menu", menuDownloadHandler)
 	fmt.Println("Gut")
 
 	http.ListenAndServe(":8080", nil)
