@@ -7,11 +7,13 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // const imageDir = "/home/sofia/Документы/Menu" // путь к корневой папке
@@ -502,8 +504,31 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var gameData map[string]interface{}
+	err = json.Unmarshal(content, &gameData)
+	if err != nil {
+		http.Error(w, "Не удалось прочитать JSON-файл", http.StatusInternalServerError)
+		return
+	}
+	//рандом 10 записей
+	pagesRaw, ok := gameData["Pages"].([]interface{})
+	if ok && len(pagesRaw) > 10 {
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(len(pagesRaw), func(i, j int) {
+			pagesRaw[i], pagesRaw[j] = pagesRaw[j], pagesRaw[i]
+		})
+		gameData["Pages"] = pagesRaw[:10]
+	}
+
+	modifiedContent, err := json.Marshal(gameData)
+	if err != nil {
+		http.Error(w, "Не удалось преобразовать данные в JSON", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(content)
+	//w.Write(content)
+	w.Write(modifiedContent)
 }
 
 // Распознавание голоса
