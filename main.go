@@ -38,6 +38,9 @@ func main() {
 	http.HandleFunc("/searchlimit", searchlimitHandler)
 	//http.HandleFunc("/register", registerHandler)       // Страница регистрации
 	http.HandleFunc("/handle-register", handleRegister) // Обработчик регистрации
+
+	http.HandleFunc("/update-profile", updateProfile)
+
 	//http.HandleFunc("/login", handleLoginPage)
 	http.HandleFunc("/handle-login", handleLogin)
 	http.HandleFunc("/files", fileHandler)
@@ -45,6 +48,7 @@ func main() {
 	http.HandleFunc("/sound", soundsearchHandler)
 
 	http.HandleFunc("/game", gameHandler)
+
 	//http.HandleFunc("/api/message", apiHandler)
 
 	/*http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))

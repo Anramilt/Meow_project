@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -377,14 +378,22 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	login := r.FormValue("login")
 	password := r.FormValue("password")
 
+	var id int
+	err := db.QueryRow(`SELECT id_account FROM account WHERE login = $1`, login).Scan(&id)
+	if err != nil {
+		http.Error(w, "Ошибка авторизации: ", http.StatusUnauthorized)
+		return
+	}
+
 	// Проверяем, существует ли пользователь и правильный ли пароль
-	err := verifyLoginCredentials(login, password)
+	err = verifyLoginCredentials(login, password)
 	if err != nil {
 		http.Error(w, "Ошибка авторизации: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Вы успешно авторизовались"))
+	// w.WriteHeader(http.StatusOK)
+	//w.Write([]byte("Вы успешно авторизовались"))
+
 	// Если авторизация прошла успешно, выводим сообщение
 	//message := "Вы успешно авторизовались"
 	/*tmpl, err := template.ParseFiles("templates/message.html")
@@ -394,6 +403,64 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl.Execute(w, message)*/
 
+	var firstName, lastName, email, subStatus sql.NullString
+	err = db.QueryRow(`
+		SELECT first_name, last_name, email, subscription_status 
+		FROM user_profile WHERE id_account = $1`, id).Scan(&firstName, &lastName, &email, &subStatus)
+
+	if err == sql.ErrNoRows {
+		_, err = db.Exec("INSERT INTO user_profile (id_account, subscription_status) VALUES ($1, 'inactive')", id)
+		if err != nil {
+			http.Error(w, "Ошибка создания профиля", http.StatusInternalServerError)
+			return
+		}
+		firstName, lastName, email, subStatus = sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{String: "inactive", Valid: true}
+	} else if err != nil {
+		http.Error(w, "Ошибка при получении данных пользователя: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id_account":          id,
+		"login":               login,
+		"first_name":          firstName.String,
+		"last_name":           lastName.String,
+		"email":               email.String,
+		"subscription_status": subStatus.String,
+	})
+}
+
+// Заполнение профиля
+func updateProfile(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var data struct {
+		ID        int    `json:"id_account"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Email     string `json:"email"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Некорректный JSON", http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec(`UPDATE user_profile SET first_name = $1, last_name = $2, email = $3 WHERE id_account = $4`,
+		data.FirstName, data.LastName, data.Email, data.ID)
+	if err != nil {
+		http.Error(w, "Ошибка обновления профиля", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // Обработчик для работы с файлами (загрузка и список)

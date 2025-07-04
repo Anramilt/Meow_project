@@ -107,10 +107,19 @@ func addAccountToDB(login, password, contentKey string) error {
 	hashedPassword := hex.EncodeToString(h.Sum(nil))
 
 	// Добавляем пользователя
-	query := "INSERT INTO account (login, password, salt, id_key) VALUES (($1), ($2), ($3), ($4))"
+	/*query := "INSERT INTO account (login, password, salt, id_key) VALUES (($1), ($2), ($3), ($4))"
 	_, err = db.Exec(query, login, hashedPassword, salt, keyID)
 	if err != nil {
 		return fmt.Errorf("ошибка при добавлении аккаунта: %w", err)
+	}*/
+	var accountID int
+	err = db.QueryRow("INSERT INTO account (login, password, salt, id_key) VALUES ($1, $2, $3, $4) RETURNING id_account", login, hashedPassword, salt, keyID).Scan(&accountID)
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении аккаунта: %w", err)
+	}
+	_, err = db.Exec("INSERT INTO user_profile(id_account, subscription_status) VALUES (($1), ($2))", accountID, "inactive")
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении профиля пользователя: %w", err)
 	}
 
 	fmt.Println("Account added in table: ", login)
@@ -469,6 +478,7 @@ func processGameJson(filePath string, bytes []byte, parentCategoryID int) {
 	fmt.Println("Успешно добавлена игра:", game.Name)
 }
 
+// Добавление изображений
 func addImage(gameID int, imagePath string) {
 	if imagePath == "" {
 		return
