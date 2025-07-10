@@ -4,7 +4,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/joho/godotenv"
 )
+
+/*
+func init() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Ошибка загрузки .env файла")
+	}
+}*/
 
 func main() {
 	ConnectDB()
@@ -16,6 +26,12 @@ func main() {
 	fmt.Println("Hello world!")
 	fmt.Println("Hello world!")
 
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Ошибка загрузки .env файла")
+	}
+	loadSMTPConfigFromEnv()
+
 	// Генерация и добавление 5 ключей
 	/*if err := addKeysToDB(5); err != nil {
 		log.Fatal("Ошибка при добавлении ключей в БД:", err)
@@ -25,10 +41,12 @@ func main() {
 	//uploadImagesToDB(imageDir)
 
 	/*rootDir := "/home/sofia/Документы/Menu" // путь к корневой папке */
-	rootDir := "/home/sofia/Test" // путь к корневой папке
+
+	//Заполнение БД
+	/*rootDir := "/home/sofia/Test" // путь к корневой папке
 	if err := processAllJsonFiles(rootDir); err != nil {
 		log.Fatal("Ошибка обработки файлов:", err)
-	}
+	}*/
 	//setupAPI(db)
 
 	//http.HandleFunc("/", handler)
@@ -38,8 +56,12 @@ func main() {
 	http.HandleFunc("/searchlimit", searchlimitHandler)
 	//http.HandleFunc("/register", registerHandler)       // Страница регистрации
 	http.HandleFunc("/handle-register", handleRegister) // Обработчик регистрации
+	http.HandleFunc("/confirm-email", handleConfirmEmail)
+	http.HandleFunc("/send-confirmation", handleSendEmail)
+	http.HandleFunc("/get-profile", handleGetProfile)
 
 	http.HandleFunc("/update-profile", updateProfile)
+	http.HandleFunc("/change-password", handleChangePassword)
 
 	//http.HandleFunc("/login", handleLoginPage)
 	http.HandleFunc("/handle-login", handleLogin)

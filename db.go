@@ -167,7 +167,7 @@ type Answer struct {
 
 type Answers []Answer
 
-// Гибкий тип, поддерживает и []string, и []Answer
+// тип поддерживает и []string и []Answer
 type FlexibleAnswers struct {
 	StringAnswers []string
 	ObjectAnswers []Answer

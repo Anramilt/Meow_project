@@ -2,19 +2,28 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"crypto/tls"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
+	"net/mail"
+	"net/smtp"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // const imageDir = "/home/sofia/Документы/Menu" // путь к корневой папке
@@ -379,33 +388,32 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 
 	var id int
-	err := db.QueryRow(`SELECT id_account FROM account WHERE login = $1`, login).Scan(&id)
+	var idKey sql.NullInt64
+	err := db.QueryRow(`SELECT id_account, id_key FROM account WHERE login = $1`, login).Scan(&id, &idKey)
+
 	if err != nil {
 		http.Error(w, "Ошибка авторизации: ", http.StatusUnauthorized)
 		return
 	}
 
-	// Проверяем, существует ли пользователь и правильный ли пароль
+	// Существует ли пользователь и правильный ли пароль
 	err = verifyLoginCredentials(login, password)
 	if err != nil {
 		http.Error(w, "Ошибка авторизации: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	// w.WriteHeader(http.StatusOK)
-	//w.Write([]byte("Вы успешно авторизовались"))
-
-	// Если авторизация прошла успешно, выводим сообщение
-	//message := "Вы успешно авторизовались"
-	/*tmpl, err := template.ParseFiles("templates/message.html")
+	userData, err := getFullUserProfile(id, login, idKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tmpl.Execute(w, message)*/
 
-	var firstName, lastName, email, subStatus sql.NullString
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(userData)
+
+	/*var firstName, lastName, email, subStatus sql.NullString
 	err = db.QueryRow(`
-		SELECT first_name, last_name, email, subscription_status 
+		SELECT first_name, last_name, email, subscription_status
 		FROM user_profile WHERE id_account = $1`, id).Scan(&firstName, &lastName, &email, &subStatus)
 
 	if err == sql.ErrNoRows {
@@ -420,6 +428,19 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var accessType *int
+	if idKey.Valid {
+		var at int
+		err = db.QueryRow(`SELECT access_type FROM key WHERE id_key = $1`, idKey.Int64).Scan(&at)
+		if err == nil {
+			accessType = &at
+
+			// Обновление на "active"
+			_, _ = db.Exec(`UPDATE user_profile SET subscription_status = 'active' WHERE id_account = $1`, id)
+			subStatus = sql.NullString{String: "active", Valid: true}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id_account":          id,
@@ -428,7 +449,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		"last_name":           lastName.String,
 		"email":               email.String,
 		"subscription_status": subStatus.String,
-	})
+		"access_type":         accessType,
+	})*/
 }
 
 // Заполнение профиля
@@ -445,7 +467,7 @@ func updateProfile(w http.ResponseWriter, r *http.Request) {
 		ID        int    `json:"id_account"`
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
-		Email     string `json:"email"`
+		//Email     string `json:"email"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -453,14 +475,333 @@ func updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := db.Exec(`UPDATE user_profile SET first_name = $1, last_name = $2, email = $3 WHERE id_account = $4`,
-		data.FirstName, data.LastName, data.Email, data.ID)
+	_, err := db.Exec(`UPDATE user_profile SET first_name = $1, last_name = $2 WHERE id_account = $3`,
+		data.FirstName, data.LastName, data.ID)
+	/*_, err := db.Exec(`UPDATE user_profile SET first_name = $1, last_name = $2, email = $3 WHERE id_account = $4`,
+	data.FirstName, data.LastName, data.Email, data.ID)*/
 	if err != nil {
 		http.Error(w, "Ошибка обновления профиля", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// Возвращает полные данные профиля по ID
+func getFullUserProfile(id int, login string, idKey sql.NullInt64) (map[string]interface{}, error) {
+
+	var firstName, lastName, email, subStatus sql.NullString
+	err := db.QueryRow(`
+		SELECT first_name, last_name, email, subscription_status 
+		FROM user_profile WHERE id_account = $1`, id).Scan(&firstName, &lastName, &email, &subStatus)
+
+	if err == sql.ErrNoRows {
+		_, err = db.Exec(`INSERT INTO user_profile (id_account, subscription_status) VALUES ($1, 'inactive')`, id)
+		if err != nil {
+			return nil, fmt.Errorf("ошибка создания профиля: %w", err)
+		}
+		firstName, lastName, email, subStatus = sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{String: "inactive", Valid: true}
+	} else if err != nil {
+		return nil, fmt.Errorf("ошибка при получении данных пользователя: %w", err)
+	}
+
+	var accessType *int
+	if idKey.Valid {
+		var at int
+		err = db.QueryRow(`SELECT access_type FROM key WHERE id_key = $1`, idKey.Int64).Scan(&at)
+		if err == nil {
+			accessType = &at
+			_, _ = db.Exec(`UPDATE user_profile SET subscription_status = 'active' WHERE id_account = $1`, id)
+			subStatus = sql.NullString{String: "active", Valid: true}
+		}
+	}
+
+	return map[string]interface{}{
+		"id_account":          id,
+		"login":               login,
+		"first_name":          firstName.String,
+		"last_name":           lastName.String,
+		"email":               email.String,
+		"subscription_status": subStatus.String,
+		"access_type":         accessType,
+	}, nil
+}
+
+func handleGetProfile(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID    int    `json:"id_account"`
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Некорректный JSON", http.StatusBadRequest)
+		return
+	}
+
+	var idKey sql.NullInt64
+	err := db.QueryRow(`SELECT id_key FROM account WHERE id_account = $1`, req.ID).Scan(&idKey)
+	if err != nil {
+		http.Error(w, "Пользователь не найден", http.StatusNotFound)
+		return
+	}
+
+	userData, err := getFullUserProfile(req.ID, req.Login, idKey)
+	if err != nil {
+		http.Error(w, "Ошибка получения профиля: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(userData)
+}
+
+// Обработчик для получения данных пользователя
+/*func handleGetUser(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+	id := r.URL.Query().Get("id")
+
+	var firstName, lastName, email, subStatus sql.NullString
+	err := db.QueryRow(`
+		SELECT first_name, last_name, email, subscription_status
+		FROM user_profile WHERE id_account = $1`, id).Scan(&firstName, &lastName, &email, &subStatus)
+	if err != nil {
+		http.Error(w, "Ошибка при получении данных пользователя", http.StatusInternalServerError)
+		return
+	}
+
+
+}*/
+
+// Обработчик изменения пароля
+func handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var data struct {
+		ID          int    `json:"id_account"`
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Некорректный JSON", http.StatusBadRequest)
+		return
+	}
+
+	var login, hashedPassword, salt string
+	err := db.QueryRow(`SELECT login, password, salt FROM account WHERE id_account = $1`, data.ID).
+		Scan(&login, &hashedPassword, &salt)
+	if err != nil {
+		http.Error(w, "Ошибка при получении данных пользователя", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Println("Пароль старый:", data.OldPassword)
+	fmt.Println("Пароль новый:", data.NewPassword)
+
+	oldHash := hashPassword(data.OldPassword, salt)
+	fmt.Println("Хеш из базы:", hashedPassword)
+	fmt.Println("Введённый хеш:", oldHash)
+
+	if oldHash != hashedPassword {
+		http.Error(w, "Неверный старый пароль", http.StatusUnauthorized)
+		return
+	}
+
+	newSalt := generateSalt()
+	newHash := hashPassword(data.NewPassword, newSalt)
+
+	_, err = db.Exec(`UPDATE account SET password = $1, salt = $2 WHERE id_account = $3`,
+		newHash, newSalt, data.ID)
+	if err != nil {
+		http.Error(w, "Ошибка при обновлении пароля", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+func hashPassword(password, salt string) string {
+	h := sha256.New()
+	h.Write([]byte(password + salt))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Обработчик отправка ссылки и запись токена
+func handleSendEmail(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var data struct {
+		ID    int    `json:"id_account"`
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Некорректный JSON", http.StatusBadRequest)
+		return
+	}
+
+	var oldEmail sql.NullString
+	err := db.QueryRow(`SELECT email FROM user_profile WHERE id_account = $1`, data.ID).Scan(&oldEmail)
+	if err != nil {
+		http.Error(w, "Ошибка при получении текущей почты", http.StatusInternalServerError)
+		return
+	}
+
+	var toSend string
+	if oldEmail.Valid && oldEmail.String != "" {
+		toSend = oldEmail.String
+	} else {
+		toSend = data.Email
+	}
+
+	token := generateToken()
+	_, err = db.Exec(`UPDATE user_profile SET email_confirm_token = $1 WHERE id_account = $2`, token, data.ID)
+	if err != nil {
+		http.Error(w, "Ошибка при обновлении токена", http.StatusInternalServerError)
+		return
+	}
+
+	link := fmt.Sprintf("http://localhost:8080/confirm-email?token=%s&email=%s", token, url.QueryEscape(toSend))
+
+	err = sendMail(toSend, "Для подтверждения почты перейдите по ссылке: "+link, "Подтверждение почты")
+	if err != nil {
+		http.Error(w, "Ошибка при отправке письма: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func generateToken() string {
+	token := make([]byte, 16)
+	_, err := rand.Read(token)
+	if err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(token)
+}
+
+type SmtpDetails struct {
+	Mail     string
+	Password string
+	Host     string
+}
+
+var config struct {
+	MailDetails SmtpDetails
+}
+
+func loadSMTPConfigFromEnv() {
+	_ = godotenv.Load()
+
+	config.MailDetails = SmtpDetails{
+		Mail:     os.Getenv("SMTP_MAIL"),
+		Password: os.Getenv("SMTP_PASSWORD"),
+		Host:     os.Getenv("SMTP_HOST"),
+	}
+}
+
+func sendMail(recipient string, content string, subject string) error {
+	from := mail.Address{Address: config.MailDetails.Mail}
+	to := mail.Address{Address: recipient}
+	host, _, _ := net.SplitHostPort(config.MailDetails.Host)
+	auth := smtp.PlainAuth("", config.MailDetails.Mail, config.MailDetails.Password, host)
+	dial, err := tls.Dial("tcp", config.MailDetails.Host, &tls.Config{InsecureSkipVerify: true, ServerName: host})
+	if err != nil {
+		return err
+	}
+	c, err := smtp.NewClient(dial, host)
+	if err != nil {
+		return err
+	}
+	if err = c.Auth(auth); err != nil {
+		return err
+	}
+	if err = c.Mail(from.Address); err != nil {
+		return err
+	}
+	if err = c.Rcpt(to.Address); err != nil {
+		return err
+	}
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+
+	message := "From: " + from.Address + "\r\n"
+	message += "To: " + to.Address + "\r\n"
+	message += "Subject: " + subject + "\r\n"
+	message += "MIME-Version: 1.0\r\n"
+	message += "Content-Type: text/plain; charset=\"utf-8\"\r\n"
+	message += "\r\n"
+
+	headerBytes := []byte(message)
+	_, err = w.Write(append(headerBytes, []byte(content)...))
+	if err != nil {
+		return err
+	}
+	err = w.Close()
+	if err != nil {
+		return err
+	}
+	_ = c.Quit()
+	return nil
+}
+
+func handleConfirmEmail(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	token := r.URL.Query().Get("token")
+	email := r.URL.Query().Get("email")
+
+	if token == "" || email == "" {
+		http.Error(w, "Некорректные параметры", http.StatusBadRequest)
+		return
+	}
+
+	res, err := db.Exec(`UPDATE user_profile SET email=$1, email_confirm_token = NULL WHERE email_confirm_token = $2`, email, token)
+	if err != nil {
+		http.Error(w, "Ошибка при обновлении токена", http.StatusInternalServerError)
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	if err != nil || rows == 0 {
+		http.Error(w, "Неверный токен", http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Email подтвержден"))
 }
 
 // Обработчик для работы с файлами (загрузка и список)
