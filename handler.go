@@ -562,6 +562,17 @@ func handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(userData)
 }
 
+func handleChangeKey(w http.ResponseWriter, r *http.Request) {
+	if handleCors(w, r) {
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+}
+
 // Обработчик для получения данных пользователя
 /*func handleGetUser(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
