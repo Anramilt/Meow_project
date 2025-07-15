@@ -1,1 +1,1 @@
-SELECT 
+ALTER TABLE user_profile ADD COLUMN temporary_email VARCHAR(100);

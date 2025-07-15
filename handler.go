@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"net/mail"
 	"net/smtp"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -562,7 +561,39 @@ func handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(userData)
 }
 
-func handleChangeKey(w http.ResponseWriter, r *http.Request) {
+// -------------------Смена цифрового ключа ---------------------
+type KeyEntry struct {
+	ID         int
+	HashedKey  string
+	Salt       string
+	AccessType int
+}
+
+func findKey(input string) (*KeyEntry, error) {
+	//Перебор ключей
+	rows, err := db.Query(`SELECT id_key, content_key, salt, access_type FROM key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var entry KeyEntry
+		if err := rows.Scan(&entry.ID, &entry.HashedKey, &entry.Salt, &entry.AccessType); err != nil {
+			log.Println(err)
+			continue
+		}
+
+		inputHash := hashPassword(input, entry.Salt)
+		if inputHash == entry.HashedKey {
+			return &entry, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func handleChangeDigitalKey(w http.ResponseWriter, r *http.Request) {
 	if handleCors(w, r) {
 		return
 	}
@@ -570,8 +601,40 @@ func handleChangeKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
+	var data struct {
+		ID         int    `json:"id_account"`
+		DigitalKey string `json:"digital_key"`
+	}
 
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Некорректный JSON", http.StatusBadRequest)
+		return
+	}
+
+	entry, err := findKey(data.DigitalKey)
+	if err != nil {
+		http.Error(w, "Ошибка при поиске ключа", http.StatusInternalServerError)
+		return
+	}
+	if entry == nil {
+		http.Error(w, "Неверный ключ", http.StatusUnauthorized)
+		return
+	}
+
+	_, err = db.Exec(`UPDATE account SET id_key = $1 WHERE id_account = $2`, entry.ID, data.ID)
+	if err != nil {
+		http.Error(w, "Ошибка при обновлении ключа", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = db.Exec(`UPDATE user_profile SET subscription_status = 'active' WHERE id_account = $1`, data.ID)
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"access_type": entry.AccessType,
+	})
 }
+
+//---------------------END Смена цифрового ключа-------------------------------------
 
 // Обработчик для получения данных пользователя
 /*func handleGetUser(w http.ResponseWriter, r *http.Request) {
@@ -676,20 +739,22 @@ func handleSendEmail(w http.ResponseWriter, r *http.Request) {
 
 	var oldEmail sql.NullString
 	err := db.QueryRow(`SELECT email FROM user_profile WHERE id_account = $1`, data.ID).Scan(&oldEmail)
-	if err != nil {
+	if err != nil || !oldEmail.Valid || oldEmail.String == "" {
 		http.Error(w, "Ошибка при получении текущей почты", http.StatusInternalServerError)
 		return
 	}
 
-	var toSend string
+	token := generateToken()
+
+	/*var toSend string
 	if oldEmail.Valid && oldEmail.String != "" {
 		toSend = oldEmail.String
 	} else {
 		toSend = data.Email
-	}
+	}*/
 
-	token := generateToken()
-	_, err = db.Exec(`UPDATE user_profile SET email_confirm_token = $1 WHERE id_account = $2`, token, data.ID)
+	//token := generateToken()
+	/*_, err = db.Exec(`UPDATE user_profile SET email_confirm_token = $1 WHERE id_account = $2`, token, data.ID)
 	if err != nil {
 		http.Error(w, "Ошибка при обновлении токена", http.StatusInternalServerError)
 		return
@@ -701,6 +766,39 @@ func handleSendEmail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Ошибка при отправке письма: "+err.Error(), http.StatusInternalServerError)
 		return
+	}*/
+
+	if !oldEmail.Valid || oldEmail.String == "" {
+		//Первая установка почты
+		_, err = db.Exec(`UPDATE user_profile SET email_confirm_token = $1, temporary_email = $2 WHERE id_account = $3`, token, data.Email, data.ID)
+		if err != nil {
+			http.Error(w, "Ошибка при сохранении токена", http.StatusInternalServerError)
+			return
+		}
+
+		// Отправка письма на ВВЕДЁННУЮ почту
+		link := fmt.Sprintf("http://localhost:8080/confirm-email?token=%s", token)
+		err = sendMail(data.Email, "Подтвердите почту, перейдя по ссылке: "+link, "Подтверждение почты")
+		if err != nil {
+			http.Error(w, "Ошибка при отправке письма: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+	} else {
+		// Смена почты (есть уже установленная почта)
+		_, err = db.Exec(`UPDATE user_profile SET email_confirm_token = $1, temporary_email = $2 WHERE id_account = $3`, token, data.Email, data.ID)
+		if err != nil {
+			http.Error(w, "Ошибка при сохранении токена", http.StatusInternalServerError)
+			return
+		}
+
+		// Отправка письма на СТАРУЮ почту
+		link := fmt.Sprintf("http://localhost:8080/confirm-email?token=%s", token)
+		err = sendMail(oldEmail.String, "Вы запросили смену почты. Подтвердите действие по ссылке: "+link, "Подтверждение смены почты")
+		if err != nil {
+			http.Error(w, "Ошибка при отправке письма: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -792,14 +890,20 @@ func handleConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := r.URL.Query().Get("token")
-	email := r.URL.Query().Get("email")
+	//email := r.URL.Query().Get("email")
 
-	if token == "" || email == "" {
+	/*if token == "" || email == "" {
 		http.Error(w, "Некорректные параметры", http.StatusBadRequest)
 		return
-	}
+	}*/
 
-	res, err := db.Exec(`UPDATE user_profile SET email=$1, email_confirm_token = NULL WHERE email_confirm_token = $2`, email, token)
+	//res, err := db.Exec(`UPDATE user_profile SET email=$1, email_confirm_token = NULL WHERE email_confirm_token = $2`, email, token)
+	res, err := db.Exec(`UPDATE user_profile 
+		SET email = temporary_email, 
+		temporary_email = NULL, 
+		email_confirm_token = NULL 
+		WHERE email_confirm_token = $1 AND temporary_email IS NOT NULL`, token)
+
 	if err != nil {
 		http.Error(w, "Ошибка при обновлении токена", http.StatusInternalServerError)
 		return

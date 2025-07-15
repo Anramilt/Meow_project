@@ -62,6 +62,7 @@ func main() {
 
 	http.HandleFunc("/update-profile", updateProfile)
 	http.HandleFunc("/change-password", handleChangePassword)
+	http.HandleFunc("/change-digital-key", handleChangeDigitalKey)
 
 	//http.HandleFunc("/login", handleLoginPage)
 	http.HandleFunc("/handle-login", handleLogin)
