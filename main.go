@@ -74,9 +74,8 @@ func main() {
 
 	//http.HandleFunc("/api/message", apiHandler)
 
-	/*http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 	http.HandleFunc("/api/upload-voice", uploadVoiceHandler)
-	*/
 
 	http.HandleFunc("/menu", menuHandler)
 	//http.HandleFunc("/api/menu", menuDownloadHandler)
