@@ -1199,7 +1199,7 @@ func menuHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Путь к New_menu.json
-	menuPath := "/home/sofia/Test/New_menu.json"
+	menuPath := "/home/sofia/Test/New_menu2.json"
 
 	// Читаем файл
 	content, err := os.ReadFile(menuPath)
